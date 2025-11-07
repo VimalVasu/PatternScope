@@ -1,0 +1,31 @@
+# Task ID: 3
+# Title: Phase 1 - Database Schema & Migrations
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create and apply database migrations for all required tables
+# Details:
+Implement 001_init.sql with traffic_events table (id, timestamp, location_id, vehicle_count, avg_speed, min_speed, max_speed, color_counts, inter_arrival_stats, traffic_density_score, raw_features). Add migrations for anomalies and trend_suggestions tables.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Create traffic_events table migration [pending]
+### Dependencies: None
+### Description: Implement the SQL migration for the traffic_events table with all required columns and appropriate data types.
+### Details:
+Create 001_init.sql migration file with CREATE TABLE statement for traffic_events including columns: id (primary key), timestamp (timestamptz), location_id (integer with foreign key constraint), vehicle_count (integer), avg_speed (float), min_speed (float), max_speed (float), color_counts (jsonb for storing color distribution), inter_arrival_stats (jsonb for arrival time statistics), traffic_density_score (float), and raw_features (jsonb for additional data). Add appropriate indexes on timestamp and location_id columns for query performance.
+
+## 2. Create anomalies table migration [pending]
+### Dependencies: 3.1
+### Description: Design and implement the SQL migration for the anomalies table to store detected traffic anomalies.
+### Details:
+Create 002_anomalies.sql migration file with CREATE TABLE statement for anomalies including columns: id (primary key), detected_at (timestamptz), traffic_event_id (foreign key to traffic_events), anomaly_type (enum or varchar), confidence_score (float), affected_metrics (jsonb array of affected metrics), description (text), and is_resolved (boolean). Add indexes on detected_at and traffic_event_id columns. Include foreign key constraint referencing traffic_events table.
+
+## 3. Create trend_suggestions table migration [pending]
+### Dependencies: 3.1
+### Description: Design and implement the SQL migration for the trend_suggestions table to store AI-generated insights about traffic patterns.
+### Details:
+Create 003_trend_suggestions.sql migration file with CREATE TABLE statement for trend_suggestions including columns: id (primary key), created_at (timestamptz), time_period_start (timestamptz), time_period_end (timestamptz), suggestion_type (enum or varchar), confidence_level (float), description (text), related_anomalies (array of foreign keys to anomalies table), and action_taken (boolean with default false). Add appropriate indexes on time_period columns and suggestion_type for efficient querying.
+

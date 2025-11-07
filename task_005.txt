@@ -1,0 +1,43 @@
+# Task ID: 5
+# Title: Phase 2 - Analysis Service Core
+# Status: pending
+# Dependencies: 2, 3
+# Priority: high
+# Description: Implement Python-based anomaly detection service
+# Details:
+Create analysis service with /run-analysis endpoint. Pull traffic_events for given period, compute rolling stats, detect anomalies using z-score, IQR, or Isolation Forest/KNN on numeric features. Write results to anomalies table. Use pandas, numpy, scikit-learn only - no LLM for detection.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement database connectivity and data retrieval [pending]
+### Dependencies: None
+### Description: Create functions to connect to the database and retrieve traffic_events data for a specified time period
+### Details:
+Implement database connection module with proper error handling. Create functions to query traffic_events table with date range filtering. Include pagination for large datasets and implement efficient data loading using pandas DataFrame. Add logging for query performance metrics.
+
+## 2. Implement statistical analysis module [pending]
+### Dependencies: 5.1
+### Description: Create module for computing rolling statistics on traffic data using pandas and numpy
+### Details:
+Implement functions to calculate rolling means, standard deviations, medians, and quartiles on numeric features. Create time-based grouping functions for different aggregation levels (hourly, daily, weekly). Optimize for performance with large datasets using vectorized operations. Include visualization helpers for debugging.
+
+## 3. Implement anomaly detection algorithms [pending]
+### Dependencies: 5.2
+### Description: Create module with multiple anomaly detection techniques including z-score, IQR, Isolation Forest and KNN
+### Details:
+Implement z-score detection with configurable thresholds. Create IQR-based outlier detection. Integrate scikit-learn's Isolation Forest and KNN algorithms with proper parameter tuning. Add algorithm selection logic based on data characteristics. Include anomaly scoring and confidence metrics for each detection method.
+
+## 4. Implement anomaly result storage [pending]
+### Dependencies: 5.3
+### Description: Create functions to store detected anomalies in the database with proper metadata
+### Details:
+Implement functions to format anomaly results with timestamps, detection method, confidence scores, and affected metrics. Create database insertion functions with proper error handling and transaction support. Add deduplication logic to prevent duplicate anomaly records. Include functions to retrieve existing anomalies for comparison.
+
+## 5. Implement /run-analysis API endpoint [pending]
+### Dependencies: 5.1, 5.2, 5.3, 5.4
+### Description: Create FastAPI endpoint that orchestrates the entire analysis pipeline from data retrieval to anomaly storage
+### Details:
+Implement FastAPI endpoint with proper request validation for date ranges and analysis parameters. Create orchestration logic to sequence data retrieval, statistical analysis, anomaly detection, and result storage. Add comprehensive error handling and status reporting. Implement asynchronous processing for long-running analyses with status tracking. Include detailed logging throughout the pipeline.
+

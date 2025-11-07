@@ -1,0 +1,394 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: edge-mock/publisher.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Simulates edge device traffic sensors by generating and publishing
+ *   realistic traffic data to the backend API. Creates synthetic traffic
+ *   events with patterns matching real-world behavior (rush hours, night
+ *   traffic, random anomalies).
+ *
+ * SYSTEM FIT:
+ *   - Development/testing tool that replaces real edge sensors
+ *   - Continuously generates traffic events and sends to backend
+ *   - Simulates realistic patterns: rush hour congestion, night low-traffic
+ *   - Injects 5% anomalies for testing anomaly detection algorithms
+ *   - Runs as standalone service in Docker Compose
+ *
+ * KEY DEPENDENCIES:
+ *   → Backend API (POST /ingest/traffic endpoint)
+ *   → Python requests library for HTTP calls
+ *   → Environment variables for configuration
+ *
+ * CALLED BY:
+ *   - Docker container startup
+ *   - Manual execution for testing
+ *
+ * CALLS:
+ *   - Backend API POST /ingest/traffic
+ *   - Backend API GET /health (for startup check)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT time, random, requests
+IMPORT datetime functions
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: TrafficDataGenerator
+// Generates realistic synthetic traffic events
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS TrafficDataGenerator:
+    """
+    Generates realistic mock traffic data with time-based patterns.
+    """
+
+    CONSTRUCTOR():
+        """
+        Initialize generator with realistic vehicle color distributions
+        and location configurations.
+        """
+
+        // Simulate multiple sensor locations
+        INITIALIZE self.location_ids = [1, 2, 3, 4, 5]
+
+        // Vehicle color distribution (realistic US statistics)
+        INITIALIZE self.colors = [
+            'white', 'black', 'silver', 'gray', 'red',
+            'blue', 'brown', 'green', 'yellow'
+        ]
+
+        // Probability distribution matching real-world data
+        INITIALIZE self.color_probabilities = [
+            0.24,  // white (most common)
+            0.22,  // black
+            0.16,  // silver
+            0.14,  // gray
+            0.10,  // red
+            0.08,  // blue
+            0.03,  // brown
+            0.02,  // green
+            0.01   // yellow (least common)
+        ]
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // MAIN METHOD: Generate Single Traffic Event
+    // High-level flow: Check time → Simulate pattern → Add variation → Inject anomalies → Return event
+    // ═══════════════════════════════════════════════════════════════
+
+    METHOD generate_event():
+        """
+        Generates a single realistic traffic event based on current time.
+        Simulates rush hour patterns, night traffic, and occasional anomalies.
+
+        Returns:
+            Dictionary containing traffic event data:
+                - timestamp, location_id, vehicle_count
+                - avg_speed, min_speed, max_speed
+                - color_counts, inter_arrival_stats
+                - traffic_density_score, raw_features
+        """
+
+        current_time = GET_CURRENT_DATETIME()
+        hour_of_day = current_time.hour
+
+        // ─────────────────────────────────────────────────────────────
+        // TIME-BASED TRAFFIC PATTERN SIMULATION
+        // ─────────────────────────────────────────────────────────────
+
+        IF hour_of_day BETWEEN 7 AND 9 OR hour_of_day BETWEEN 17 AND 19:
+            // ═════════════════════════════════════════════════════════
+            // RUSH HOUR PATTERN
+            // ═════════════════════════════════════════════════════════
+            vehicle_count = RANDOM_INTEGER(40, 100)      // High traffic
+            avg_speed = RANDOM_GAUSSIAN(mean: 25, std: 8)  // Slow (congestion)
+            density_score = RANDOM_FLOAT(0.7, 1.0)       // High density
+
+        ELSE IF hour_of_day >= 22 OR hour_of_day <= 5:
+            // ═════════════════════════════════════════════════════════
+            // NIGHT TIME PATTERN
+            // ═════════════════════════════════════════════════════════
+            vehicle_count = RANDOM_INTEGER(5, 20)         // Low traffic
+            avg_speed = RANDOM_GAUSSIAN(mean: 50, std: 10) // Fast (open roads)
+            density_score = RANDOM_FLOAT(0.1, 0.3)        // Low density
+
+        ELSE:
+            // ═════════════════════════════════════════════════════════
+            // NORMAL HOURS PATTERN
+            // ═════════════════════════════════════════════════════════
+            vehicle_count = RANDOM_INTEGER(20, 60)        // Moderate traffic
+            avg_speed = RANDOM_GAUSSIAN(mean: 40, std: 12) // Moderate speed
+            density_score = RANDOM_FLOAT(0.4, 0.7)        // Moderate density
+
+        // ─────────────────────────────────────────────────────────────
+        // ENSURE REALISTIC SPEED VALUES
+        // ─────────────────────────────────────────────────────────────
+        avg_speed = MAX(5, avg_speed)  // No negative or zero speeds
+
+        // Calculate min/max speeds with realistic variation
+        min_speed = MAX(5, avg_speed - RANDOM_FLOAT(5, 15))
+        max_speed = avg_speed + RANDOM_FLOAT(10, 25)
+
+        // ─────────────────────────────────────────────────────────────
+        // GENERATE VEHICLE COLOR DISTRIBUTION
+        // ─────────────────────────────────────────────────────────────
+        color_counts = {}
+        remaining_vehicles = vehicle_count
+
+        FOR EACH (color, probability) IN ZIP(self.colors, self.color_probabilities):
+            IF remaining_vehicles <= 0:
+                BREAK
+
+            // Apply probability with random variation (±20%)
+            count = INTEGER(vehicle_count * probability * RANDOM_FLOAT(0.8, 1.2))
+            count = MIN(count, remaining_vehicles)
+
+            IF count > 0:
+                color_counts[color] = count
+                remaining_vehicles = remaining_vehicles - count
+
+        // ─────────────────────────────────────────────────────────────
+        // GENERATE INTER-ARRIVAL STATISTICS
+        // Time between successive vehicle detections
+        // ─────────────────────────────────────────────────────────────
+        mean_interval = 3600 / vehicle_count IF vehicle_count > 0 ELSE 60  // seconds
+
+        inter_arrival_stats = {
+            mean: mean_interval,
+            std: mean_interval * 0.4,               // Standard deviation
+            min: MAX(0.5, mean_interval * 0.2),     // Minimum gap
+            max: mean_interval * 2.5                 // Maximum gap
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // ANOMALY INJECTION (5% chance)
+        // For testing anomaly detection algorithms
+        // ─────────────────────────────────────────────────────────────
+        IF RANDOM_FLOAT(0, 1) < 0.05:  // 5% probability
+            anomaly_type = RANDOM_CHOICE([
+                'high_speed',
+                'low_speed',
+                'high_density',
+                'low_density'
+            ])
+
+            IF anomaly_type == 'high_speed':
+                // Simulate speeding or emergency vehicles
+                avg_speed = avg_speed * 1.8
+                max_speed = max_speed * 2.0
+
+            ELSE IF anomaly_type == 'low_speed':
+                // Simulate severe congestion or incident
+                avg_speed = avg_speed * 0.3
+                min_speed = min_speed * 0.2
+
+            ELSE IF anomaly_type == 'high_density':
+                // Simulate unusual traffic jam
+                vehicle_count = INTEGER(vehicle_count * 2.5)
+                density_score = MIN(1.0, density_score * 1.5)
+
+            ELSE IF anomaly_type == 'low_density':
+                // Simulate road closure or very light traffic
+                vehicle_count = MAX(1, INTEGER(vehicle_count * 0.3))
+                density_score = density_score * 0.3
+
+        // ─────────────────────────────────────────────────────────────
+        // CONSTRUCT AND RETURN EVENT OBJECT
+        // ─────────────────────────────────────────────────────────────
+        RETURN {
+            timestamp: current_time.toISO8601(),
+            location_id: RANDOM_CHOICE(self.location_ids),
+            vehicle_count: INTEGER(vehicle_count),
+            avg_speed: ROUND(avg_speed, 2),
+            min_speed: ROUND(min_speed, 2),
+            max_speed: ROUND(max_speed, 2),
+            color_counts: color_counts,
+            inter_arrival_stats: inter_arrival_stats,
+            traffic_density_score: ROUND(density_score, 3),
+            raw_features: {
+                weather: RANDOM_CHOICE(['clear', 'rainy', 'cloudy']),
+                visibility: RANDOM_CHOICE(['good', 'moderate', 'poor'])
+            }
+        }
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: TrafficPublisher
+// Publishes generated events to backend API
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS TrafficPublisher:
+    """
+    Publishes traffic events to backend API with retry logic.
+    """
+
+    CONSTRUCTOR(backend_url, interval):
+        """
+        Arguments:
+            backend_url: Base URL of backend API
+            interval: Seconds between event publications
+        """
+        INITIALIZE self.backend_url = backend_url (remove trailing slash)
+        INITIALIZE self.interval = interval
+        INITIALIZE self.generator = new TrafficDataGenerator()
+        INITIALIZE self.max_retries = 3
+        INITIALIZE self.retry_delay = 2  // seconds
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // METHOD: Publish Single Event
+    // High-level flow: Build request → Retry loop → POST to API → Handle response
+    // ═══════════════════════════════════════════════════════════════
+
+    METHOD publish_event(event):
+        """
+        Publishes a single event to backend with retry logic.
+
+        Arguments:
+            event: Traffic event dictionary
+
+        Returns:
+            Boolean indicating success/failure
+        """
+
+        endpoint = self.backend_url + "/ingest/traffic"
+
+        // Retry loop for fault tolerance
+        FOR attempt IN RANGE(0, self.max_retries):
+
+            TRY:
+                // Make HTTP POST request
+                response = HTTP_POST(
+                    url: endpoint,
+                    json_body: event,
+                    timeout: 5  // seconds
+                )
+
+                // Check for success
+                IF response.status_code == 201:
+                    PRINT "✓ Published event: location=" + event.location_id +
+                          ", vehicles=" + event.vehicle_count +
+                          ", speed=" + event.avg_speed
+                    RETURN true
+
+                ELSE:
+                    PRINT "✗ Failed to publish event: " + response.status_code +
+                          " - " + response.text
+
+                    // Retry with exponential backoff
+                    IF attempt < self.max_retries - 1:
+                        SLEEP(self.retry_delay * (attempt + 1))
+
+            CATCH network_error:
+                PRINT "✗ Connection error (attempt " + (attempt + 1) + "/" +
+                      self.max_retries + "): " + network_error
+
+                // Retry with exponential backoff
+                IF attempt < self.max_retries - 1:
+                    SLEEP(self.retry_delay * (attempt + 1))
+
+        RETURN false  // All retries failed
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // METHOD: Main Loop
+    // Continuously generates and publishes events
+    // ═══════════════════════════════════════════════════════════════
+
+    METHOD run():
+        """
+        Main event publication loop.
+        Generates and publishes events at configured interval.
+        Runs indefinitely until stopped.
+        """
+
+        PRINT "Starting traffic event publisher..."
+        PRINT "Backend URL: " + self.backend_url
+        PRINT "Publish interval: " + self.interval + " seconds"
+        PRINT ""
+
+        LOOP forever:
+            // Generate realistic event
+            event = self.generator.generate_event()
+
+            // Publish to backend
+            self.publish_event(event)
+
+            // Wait before next event
+            SLEEP(self.interval)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN EXECUTION
+// ═══════════════════════════════════════════════════════════════════
+
+IF executed_as_main_script:
+
+    // ─────────────────────────────────────────────────────────────
+    // Load configuration from environment
+    // ─────────────────────────────────────────────────────────────
+    backend_host = ENV_VAR("BACKEND_HOST", default: "backend")
+    backend_port = ENV_VAR("BACKEND_PORT", default: "3000")
+    backend_url = "http://" + backend_host + ":" + backend_port
+
+    publish_interval = INTEGER(ENV_VAR("PUBLISH_INTERVAL", default: "10"))
+
+    // Create publisher
+    publisher = new TrafficPublisher(backend_url, publish_interval)
+
+    // ─────────────────────────────────────────────────────────────
+    // Wait for backend to be ready (health check)
+    // ─────────────────────────────────────────────────────────────
+    PRINT "Waiting for backend to be ready..."
+
+    FOR attempt IN RANGE(0, 30):  // Try for 60 seconds
+        TRY:
+            response = HTTP_GET(
+                url: backend_url + "/health",
+                timeout: 2
+            )
+
+            IF response.status_code == 200:
+                PRINT "Backend is ready!"
+                BREAK
+
+        CATCH:
+            PASS  // Ignore errors, continue waiting
+
+        SLEEP(2)
+
+    ELSE:
+        // Timeout reached but continue anyway
+        PRINT "Warning: Backend health check failed, but continuing anyway..."
+
+    // ─────────────────────────────────────────────────────────────
+    // Start publishing events
+    // ─────────────────────────────────────────────────────────────
+    publisher.run()
+
+
+/**
+ * Event Generation Patterns:
+ *
+ * Rush Hour (7-9 AM, 5-7 PM):
+ * - High vehicle count (40-100)
+ * - Low speeds (25 km/h avg) due to congestion
+ * - High density (0.7-1.0)
+ *
+ * Night Time (10 PM - 5 AM):
+ * - Low vehicle count (5-20)
+ * - High speeds (50 km/h avg) due to open roads
+ * - Low density (0.1-0.3)
+ *
+ * Normal Hours:
+ * - Moderate counts, speeds, density
+ *
+ * Anomalies (5% of events):
+ * - High speed: 1.8x-2x normal (emergency vehicles, speeding)
+ * - Low speed: 0.2x-0.3x normal (severe congestion, accidents)
+ * - High density: 2.5x normal (unusual traffic jam)
+ * - Low density: 0.3x normal (road closure, very light traffic)
+ */

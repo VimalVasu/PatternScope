@@ -1,0 +1,92 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/index.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Main entry point for the PatternScope Backend API server.
+ *   Sets up the HTTP server, registers middleware (CORS), and registers
+ *   all API routes. This is the first file that runs when the backend
+ *   service starts.
+ *
+ * SYSTEM FIT:
+ *   - Acts as the orchestration layer for the entire backend service
+ *   - Connects to PostgreSQL database via connection pool (db.ts)
+ *   - Exposes REST API endpoints consumed by the Dashboard frontend
+ *   - Receives traffic data from Edge devices (or edge-mock simulator)
+ *   - Serves as the central data access point for all traffic events,
+ *     anomalies, and trend suggestions stored in the database
+ *
+ * KEY DEPENDENCIES:
+ *   → routes/traffic.ts - Traffic event ingestion and metrics
+ *   → routes/dashboard.ts - Dashboard summary and timeseries data
+ *   → routes/trends.ts - AI-generated trend suggestions
+ *   → routes/health.ts - Health check endpoint
+ *   → db.ts - PostgreSQL connection pool
+ *
+ * CALLED BY:
+ *   - Docker container startup
+ *   - npm start / node command
+ *
+ * CALLS:
+ *   - All route modules to register endpoints
+ *   - Database connection pool for all DB operations
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFIGURATION & SETUP
+// ═══════════════════════════════════════════════════════════════════
+
+LOAD environment_variables FROM .env file
+
+INITIALIZE web_framework AS Fastify WITH logger enabled
+
+SET server_port = ENV_VAR("PORT", default: 3000)
+SET server_host = ENV_VAR("HOST", default: "0.0.0.0")
+
+
+// ═══════════════════════════════════════════════════════════════════
+// SERVER STARTUP FLOW
+// High-level: Load config → Register middleware → Register routes → Start listening
+// ═══════════════════════════════════════════════════════════════════
+
+FUNCTION start_server():
+    """
+    Main server initialization and startup sequence.
+    Registers all middleware and routes, then starts listening for HTTP requests.
+
+    Called by: Script execution (bottom of file)
+    Calls: CORS middleware, route registration functions
+    """
+
+    TRY:
+        // Step 1: Enable Cross-Origin Resource Sharing
+        // Allows the frontend dashboard to make requests to this API
+        REGISTER cors_middleware WITH:
+            allow_all_origins = true
+
+        // Step 2: Register all API route modules
+        // Each module adds its own endpoints to the server
+        REGISTER health_route_module      // GET /health
+        REGISTER traffic_route_module     // POST /ingest/traffic, GET /metrics/traffic
+        REGISTER dashboard_route_module   // GET /dashboard/summary, GET /dashboard/timeseries
+        REGISTER trends_route_module      // GET /trends/suggestions
+
+        // Step 3: Start HTTP server and listen for connections
+        START server LISTENING on host=server_host, port=server_port
+
+        LOG "Backend server running on http://" + server_host + ":" + server_port
+
+    CATCH error:
+        LOG_ERROR error details
+        EXIT process WITH failure_code
+
+    END TRY
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXECUTION
+// ═══════════════════════════════════════════════════════════════════
+
+EXECUTE start_server()

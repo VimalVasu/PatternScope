@@ -1,0 +1,293 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: analysis/services/llm_client.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Interfaces with Ollama LLM service to generate human-readable trend
+ *   suggestions from detected anomalies. Transforms raw anomaly data into
+ *   actionable insights for traffic management.
+ *
+ * SYSTEM FIT:
+ *   - Bridges the gap between ML anomaly detection and human understanding
+ *   - Calls external Ollama service (self-hosted LLM) for text generation
+ *   - Provides prompt engineering to get quality suggestions
+ *   - Stores generated suggestions in database for dashboard display
+ *   - Part of the AI insight pipeline: Anomalies → Prompt → LLM → Suggestions
+ *
+ * KEY DEPENDENCIES:
+ *   → services/db.py - Database access for storing suggestions
+ *   → Ollama service (external) - LLM for text generation
+ *   → httpx - Async HTTP client for API calls
+ *
+ * CALLED BY:
+ *   - analysis/main.py POST /run-analysis endpoint
+ *     (called after anomaly detection completes)
+ *
+ * CALLS:
+ *   - Ollama API endpoint /api/generate
+ *   - Database.insert_trend_suggestion()
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT httpx (async HTTP client)
+IMPORT Database FROM services/db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: OllamaClient
+// Main LLM client for production use
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS OllamaClient:
+    """
+    Client for interacting with Ollama LLM service to generate trend suggestions.
+    """
+
+    CONSTRUCTOR(url, model):
+        """
+        Arguments:
+            url: Ollama service URL (e.g., "http://ollama:11434")
+            model: LLM model name (e.g., "llama2")
+        """
+        INITIALIZE self.url = url (remove trailing slash)
+        INITIALIZE self.model = model
+        INITIALIZE self.timeout = ENV_VAR("OLLAMA_TIMEOUT", default: 30)  // seconds
+        INITIALIZE self.database = new Database()
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MAIN METHOD: Generate Trend Suggestions
+    // High-level flow: Build prompt → Call LLM → Store suggestion → Return
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD generate_trend_suggestions(anomalies, start, end):
+        """
+        Generates human-readable trend suggestions from detected anomalies.
+
+        Arguments:
+            anomalies: Array of anomaly objects with types, metrics, descriptions
+            start: datetime - Analysis period start
+            end: datetime - Analysis period end
+
+        Returns:
+            Array of suggestion objects (usually one comprehensive suggestion)
+
+        Called by: main.py after anomaly detection
+        Calls: _build_prompt(), _call_ollama(), database.insert_trend_suggestion()
+        """
+
+        IF anomalies IS empty:
+            RETURN []
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 1: Build LLM prompt from anomaly data
+        // ─────────────────────────────────────────────────────────────
+        prompt = self._build_prompt(anomalies, start, end)
+
+        TRY:
+            // ─────────────────────────────────────────────────────────
+            // Step 2: Call Ollama LLM API
+            // ─────────────────────────────────────────────────────────
+            suggestion_text = AWAIT self._call_ollama(prompt)
+
+            // ─────────────────────────────────────────────────────────
+            // Step 3: Prepare suggestion object
+            // ─────────────────────────────────────────────────────────
+            suggestion = {
+                time_period_start: start.to_ISO8601() IF start ELSE null,
+                time_period_end: end.to_ISO8601() IF end ELSE null,
+                suggestion_type: "anomaly_summary",
+                confidence_level: 0.8,  // LLM-based suggestions have moderate confidence
+                description: suggestion_text,
+                related_anomalies: [
+                    anomaly.traffic_event_id
+                    FOR anomaly IN first_10_anomalies
+                ]  // Limit to 10 to avoid array size issues
+            }
+
+            // ─────────────────────────────────────────────────────────
+            // Step 4: Store suggestion in database
+            // ─────────────────────────────────────────────────────────
+            suggestion_id = self.database.insert_trend_suggestion(suggestion)
+            suggestion.id = suggestion_id
+
+            RETURN [suggestion]
+
+        CATCH llm_error:
+            LOG_ERROR "Error generating trend suggestions: " + llm_error
+
+            // ─────────────────────────────────────────────────────────
+            // Fallback: Return generic suggestion if LLM fails
+            // ─────────────────────────────────────────────────────────
+            RETURN [{
+                time_period_start: start.to_ISO8601() IF start ELSE null,
+                time_period_end: end.to_ISO8601() IF end ELSE null,
+                suggestion_type: "anomaly_summary",
+                confidence_level: 0.5,  // Lower confidence for fallback
+                description: "Detected {{count}} anomalies in traffic patterns. Manual review recommended.",
+                related_anomalies: [anomaly.traffic_event_id FOR anomaly IN first_10_anomalies]
+            }]
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: Build LLM Prompt
+    // Constructs context-rich prompt for the LLM
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _build_prompt(anomalies, start, end):
+        """
+        Builds a context-aware prompt for the LLM.
+        Includes time period, anomaly counts by type, and specific instructions.
+
+        Returns: String prompt for LLM
+        """
+
+        // Format time period
+        IF start AND end:
+            period_text = "from " + start.format("YYYY-MM-DD HH:mm") + " to " + end.format("YYYY-MM-DD HH:mm")
+        ELSE IF start:
+            period_text = "since " + start.format("YYYY-MM-DD HH:mm")
+        ELSE:
+            period_text = ""
+
+        // Group anomalies by detection method
+        anomalies_by_type = GROUP anomalies BY anomaly_type
+
+        // Build summary of detection methods
+        anomaly_summary_lines = []
+        FOR EACH type, items IN anomalies_by_type:
+            ADD "- {{count}} anomalies detected using {{type}} method" TO anomaly_summary_lines
+
+        anomaly_summary = JOIN(anomaly_summary_lines, "\n")
+
+        // ─────────────────────────────────────────────────────────────
+        // Construct full prompt with instructions
+        // ─────────────────────────────────────────────────────────────
+        prompt = """
+Analyze the following traffic anomalies {{period}} and provide actionable insights:
+
+{{anomaly_summary}}
+
+Total anomalies detected: {{total_count}}
+
+Based on these anomalies, provide 3-5 bullet-point suggestions for traffic management. Focus on:
+1. Potential causes of the anomalies
+2. Safety concerns
+3. Recommended actions
+
+Keep each bullet point concise (1-2 sentences).
+"""
+
+        RETURN prompt
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: Call Ollama API
+    // Makes HTTP request to Ollama LLM service
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _call_ollama(prompt):
+        """
+        Makes API call to Ollama to generate text.
+
+        Arguments:
+            prompt: String prompt for the LLM
+
+        Returns:
+            String response from LLM
+
+        Raises:
+            HTTPError if API call fails
+        """
+
+        endpoint = self.url + "/api/generate"
+
+        // Prepare API request payload
+        payload = {
+            model: self.model,
+            prompt: prompt,
+            stream: false,                    // Get complete response at once
+            options: {
+                temperature: 0.7,             // Moderate creativity
+                top_p: 0.9                    // Nucleus sampling parameter
+            }
+        }
+
+        // Make async HTTP request
+        CREATE async_http_client WITH timeout=self.timeout:
+            response = AWAIT POST endpoint WITH json_body=payload
+            ASSERT response.status_code == 200
+
+            result = response.as_json()
+            suggestion_text = result.get("response", "No suggestions generated")
+
+            RETURN suggestion_text
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: MockLLMClient
+// Fallback client for testing without actual LLM service
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS MockLLMClient:
+    """
+    Mock LLM client for testing and development.
+    Returns pre-formatted generic suggestions without calling external LLM.
+    """
+
+    CONSTRUCTOR():
+        INITIALIZE self.database = new Database()
+
+
+    METHOD generate_trend_suggestions(anomalies, start, end):
+        """
+        Generates mock trend suggestions without calling LLM.
+        Useful for testing and development when Ollama is not available.
+        """
+
+        // Generate generic but useful suggestion text
+        suggestions_text = """
+Based on the analysis of {{count}} traffic anomalies:
+
+• Unusual traffic patterns detected - consider investigating potential incidents or events
+• Speed variations suggest possible congestion or road conditions requiring attention
+• Monitor these patterns for recurring issues during similar time periods
+• Consider adjusting traffic signal timing if anomalies persist
+• Review footage or sensor data for the affected time periods
+"""
+
+        suggestion = {
+            time_period_start: start.to_ISO8601() IF start ELSE null,
+            time_period_end: end.to_ISO8601() IF end ELSE null,
+            suggestion_type: "anomaly_summary",
+            confidence_level: 0.8,
+            description: suggestions_text,
+            related_anomalies: [anomaly.traffic_event_id FOR anomaly IN first_10_anomalies]
+        }
+
+        // Store in database
+        suggestion_id = self.database.insert_trend_suggestion(suggestion)
+        suggestion.id = suggestion_id
+
+        RETURN [suggestion]
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT OllamaClient
+EXPORT MockLLMClient
+
+/**
+ * Usage Pattern:
+ *
+ * # Production
+ * llm_client = OllamaClient(url="http://ollama:11434", model="llama2")
+ * suggestions = await llm_client.generate_trend_suggestions(anomalies, start, end)
+ *
+ * # Testing
+ * mock_client = MockLLMClient()
+ * suggestions = await mock_client.generate_trend_suggestions(anomalies, start, end)
+ */

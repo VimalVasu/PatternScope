@@ -1,0 +1,201 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/routes/dashboard.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Provides dashboard-specific data endpoints for the frontend UI.
+ *   Aggregates traffic events and anomaly data into formats optimized
+ *   for visualization in the React dashboard.
+ *
+ * SYSTEM FIT:
+ *   - Serves the React dashboard frontend with KPI data and chart data
+ *   - Queries both traffic_events and anomalies tables for complete picture
+ *   - Provides pre-aggregated data to minimize frontend processing
+ *   - Optimized for visualization (hourly grouping, summary stats)
+ *
+ * KEY DEPENDENCIES:
+ *   → db.ts - Database connection pool
+ *   → traffic_events table - Raw traffic data
+ *   → anomalies table - Detected anomalies from analysis service
+ *
+ * CALLED BY:
+ *   - dashboard/src/services/api.js functions:
+ *     - getDashboardSummary()
+ *     - getDashboardTimeseries()
+ *
+ * CALLS:
+ *   - PostgreSQL database (SELECT with aggregations, JOINs)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT database_connection_pool FROM ../db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /dashboard/summary
+// High-level flow: Build filters → Query traffic stats → Query anomaly count → Combine results
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/dashboard/summary":
+    """
+    Returns high-level summary statistics for the dashboard KPI cards.
+    Combines traffic metrics with anomaly counts for a complete overview.
+
+    Query Parameters:
+        start (optional): Filter events after this datetime
+        end (optional): Filter events before this datetime
+
+    Called by: dashboard/App.jsx via api.getDashboardSummary()
+    Used in: KPICards component to display key metrics
+    """
+
+    EXTRACT start_time FROM query_parameters (optional)
+    EXTRACT end_time FROM query_parameters (optional)
+
+    TRY:
+        // ─────────────────────────────────────────────────────────────
+        // Build dynamic WHERE clause for filtering by date range
+        // ─────────────────────────────────────────────────────────────
+        conditions = []
+        parameters = []
+
+        IF start_time IS provided:
+            ADD "timestamp >= $1" TO conditions
+            ADD start_time TO parameters
+
+        IF end_time IS provided:
+            ADD "timestamp <= $N" TO conditions
+            ADD end_time TO parameters
+
+        traffic_where_clause = IF conditions THEN "WHERE " + JOIN(conditions, " AND ") ELSE ""
+
+        // ─────────────────────────────────────────────────────────────
+        // Query 1: Get traffic summary statistics
+        // ─────────────────────────────────────────────────────────────
+        TRAFFIC_SUMMARY_QUERY = """
+            SELECT
+                COUNT(*) as event_count,               // Total events in period
+                SUM(vehicle_count) as total_vehicles,  // Total vehicles observed
+                AVG(avg_speed) as average_speed,       // Mean speed
+                MIN(avg_speed) as min_speed,           // Minimum speed
+                MAX(avg_speed) as max_speed            // Maximum speed
+            FROM traffic_events
+            """ + traffic_where_clause
+
+        traffic_result = EXECUTE database_connection_pool.query(
+            SQL: TRAFFIC_SUMMARY_QUERY,
+            PARAMS: parameters
+        )
+
+        // ─────────────────────────────────────────────────────────────
+        // Query 2: Get anomaly count for the same period
+        // Note: anomalies table uses 'detected_at' instead of 'timestamp'
+        // ─────────────────────────────────────────────────────────────
+        anomaly_conditions = REPLACE "timestamp" WITH "detected_at" IN conditions
+        anomaly_where_clause = IF anomaly_conditions THEN "WHERE " + JOIN(anomaly_conditions, " AND ") ELSE ""
+
+        ANOMALY_COUNT_QUERY = """
+            SELECT COUNT(*) as anomaly_count
+            FROM anomalies
+            """ + anomaly_where_clause
+
+        anomaly_result = EXECUTE database_connection_pool.query(
+            SQL: ANOMALY_COUNT_QUERY,
+            PARAMS: parameters
+        )
+
+        // ─────────────────────────────────────────────────────────────
+        // Combine and return results
+        // ─────────────────────────────────────────────────────────────
+        RETURN HTTP 200 (OK):
+            event_count: traffic_result.event_count
+            total_vehicles: traffic_result.total_vehicles
+            average_speed: traffic_result.average_speed
+            min_speed: traffic_result.min_speed
+            max_speed: traffic_result.max_speed
+            anomaly_count: anomaly_result.anomaly_count
+            period:
+                start: start_time OR null
+                end: end_time OR null
+
+    CATCH database_error:
+        LOG_ERROR database_error
+
+        RETURN HTTP 500 (Internal Server Error):
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /dashboard/timeseries
+// High-level flow: Build filters → Query hourly aggregations → Return time-bucketed data
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/dashboard/timeseries":
+    """
+    Returns time-series data aggregated by hour for chart visualization.
+    Provides vehicle counts, average speeds, and event counts per hour.
+
+    Query Parameters:
+        start (optional): Filter events after this datetime
+        end (optional): Filter events before this datetime
+
+    Called by: dashboard/App.jsx via api.getDashboardTimeseries()
+    Used in: TimeSeriesChart component to display traffic trends over time
+    """
+
+    EXTRACT start_time FROM query_parameters (optional)
+    EXTRACT end_time FROM query_parameters (optional)
+
+    TRY:
+        // Build WHERE clause
+        conditions = []
+        parameters = []
+
+        IF start_time IS provided:
+            ADD "timestamp >= $1" TO conditions
+            ADD start_time TO parameters
+
+        IF end_time IS provided:
+            ADD "timestamp <= $N" TO conditions
+            ADD end_time TO parameters
+
+        where_clause = IF conditions THEN "WHERE " + JOIN(conditions, " AND ") ELSE ""
+
+        // ─────────────────────────────────────────────────────────────
+        // Query: Hourly aggregated timeseries data
+        // ─────────────────────────────────────────────────────────────
+        TIMESERIES_QUERY = """
+            SELECT
+                DATE_TRUNC('hour', timestamp) as time_bucket,  // Round timestamp to hour
+                SUM(vehicle_count) as vehicle_count,            // Total vehicles in this hour
+                AVG(avg_speed) as avg_speed,                    // Average speed in this hour
+                COUNT(*) as event_count                         // Number of events in this hour
+            FROM traffic_events
+            """ + where_clause + """
+            GROUP BY time_bucket
+            ORDER BY time_bucket
+        """
+
+        result = EXECUTE database_connection_pool.query(
+            SQL: TIMESERIES_QUERY,
+            PARAMS: parameters
+        )
+
+        // Return array of time-bucketed data points
+        RETURN HTTP 200 (OK):
+            timeseries: result.all_rows
+            // Each row contains: time_bucket, vehicle_count, avg_speed, event_count
+
+    CATCH database_error:
+        LOG_ERROR database_error
+
+        RETURN HTTP 500 (Internal Server Error):
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT dashboard_routes_module

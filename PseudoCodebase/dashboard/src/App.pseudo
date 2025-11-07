@@ -1,0 +1,254 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/App.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Main React component that orchestrates the entire dashboard UI.
+ *   Manages application state, data fetching, and renders all child components.
+ *   Serves as the central hub for dashboard functionality.
+ *
+ * SYSTEM FIT:
+ *   - Root component of the React application
+ *   - Manages global state (date range, data, loading, errors)
+ *   - Coordinates data fetching from backend API
+ *   - Renders header and all dashboard widgets
+ *   - Handles user interactions (date changes, refresh)
+ *
+ * KEY DEPENDENCIES:
+ *   → components/DateRangeSelector.jsx - Date/time range picker
+ *   → components/KPICards.jsx - Summary statistics cards
+ *   → components/TimeSeriesChart.jsx - Traffic visualization chart
+ *   → components/TrendSuggestions.jsx - AI-generated insights display
+ *   → services/api.js - Backend API client
+ *
+ * CALLED BY:
+ *   - main.jsx (application entry point)
+ *
+ * CALLS:
+ *   - Backend API via services/api.js
+ *   - All child components for rendering
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT React hooks (useState, useEffect)
+IMPORT DateRangeSelector FROM components/DateRangeSelector.pseudo
+IMPORT KPICards FROM components/KPICards.pseudo
+IMPORT TimeSeriesChart FROM components/TimeSeriesChart.pseudo
+IMPORT TrendSuggestions FROM components/TrendSuggestions.pseudo
+IMPORT api_functions FROM services/api.pseudo
+IMPORT styles FROM ./App.css
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT: App
+// High-level flow: Initialize state → Fetch data on mount → Render UI → Handle user interactions
+// ═══════════════════════════════════════════════════════════════════
+
+COMPONENT App():
+    """
+    Main dashboard application component.
+    Manages state and coordinates all dashboard functionality.
+    """
+
+    // ═══════════════════════════════════════════════════════════════
+    // STATE MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * dateRange: Controls the time window for data display
+     * Default: Last 24 hours
+     */
+    [dateRange, setDateRange] = useState({
+        start: (current_time - 24_hours).toISO8601_without_seconds,
+        end: current_time.toISO8601_without_seconds
+    })
+
+    /**
+     * summary: Contains KPI data (event count, vehicle count, speeds, anomalies)
+     * Initially null until data loads
+     */
+    [summary, setSummary] = useState(null)
+
+    /**
+     * timeseries: Array of hourly aggregated data points for chart
+     * Initially empty array
+     */
+    [timeseries, setTimeseries] = useState([])
+
+    /**
+     * suggestions: Array of AI-generated trend suggestions
+     * Initially empty array
+     */
+    [suggestions, setSuggestions] = useState([])
+
+    /**
+     * loading: Boolean indicating if data is currently being fetched
+     * Shows loading indicator to user
+     */
+    [loading, setLoading] = useState(false)
+
+    /**
+     * error: Contains error message if any API call fails
+     * Initially null
+     */
+    [error, setError] = useState(null)
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // DATA FETCHING FUNCTION
+    // ═══════════════════════════════════════════════════════════════
+
+    FUNCTION fetchData():
+        """
+        Fetches all dashboard data from backend API.
+        Makes three parallel API calls for efficiency.
+
+        Called by:
+        - useEffect on component mount
+        - handleRefresh when user clicks refresh button
+        """
+
+        SET loading = true
+        SET error = null
+
+        TRY:
+            // ─────────────────────────────────────────────────────────
+            // Make three API calls in parallel using Promise.all
+            // More efficient than sequential calls
+            // ─────────────────────────────────────────────────────────
+            [summaryData, timeseriesData, suggestionsData] = AWAIT Promise.all([
+                api.getDashboardSummary(dateRange.start, dateRange.end),
+                api.getDashboardTimeseries(dateRange.start, dateRange.end),
+                api.getTrendSuggestions(dateRange.start, dateRange.end)
+            ])
+
+            // Update state with fetched data
+            SET summary = summaryData
+            SET timeseries = timeseriesData.timeseries OR []
+            SET suggestions = suggestionsData.suggestions OR []
+
+        CATCH api_error:
+            // Handle errors gracefully
+            SET error = api_error.message
+            LOG_ERROR "Error fetching data:" + api_error
+
+        FINALLY:
+            SET loading = false
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // LIFECYCLE: COMPONENT MOUNT
+    // ═══════════════════════════════════════════════════════════════
+
+    useEffect(() => {
+        """
+        Runs once when component first mounts.
+        Fetches initial data with default date range.
+        """
+        CALL fetchData()
+    }, [])  // Empty dependency array = run once on mount
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // EVENT HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
+    FUNCTION handleDateRangeChange(newRange):
+        """
+        Called when user changes date/time range in DateRangeSelector.
+        Updates state with new range (does not auto-refresh data).
+        """
+        SET dateRange = newRange
+
+
+    FUNCTION handleRefresh():
+        """
+        Called when user clicks the "Refresh" button.
+        Re-fetches data with current date range.
+        """
+        CALL fetchData()
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // RENDER UI
+    // ═══════════════════════════════════════════════════════════════
+
+    RETURN (
+        <div className="app">
+            {/* ─────────────────────────────────────────────────── */}
+            {/* HEADER */}
+            {/* ─────────────────────────────────────────────────── */}
+            <header className="app-header">
+                <h1>PatternScope Dashboard</h1>
+                <p>Traffic Monitoring & Anomaly Detection</p>
+            </header>
+
+            <div className="container">
+                {/* ─────────────────────────────────────────────── */}
+                {/* DATE RANGE SELECTOR */}
+                {/* User can select time window and refresh data */}
+                {/* ─────────────────────────────────────────────── */}
+                <DateRangeSelector
+                    dateRange={dateRange}
+                    onChange={handleDateRangeChange}
+                    onRefresh={handleRefresh}
+                    loading={loading}
+                />
+
+                {/* ─────────────────────────────────────────────── */}
+                {/* ERROR MESSAGE */}
+                {/* Only shows if error occurred */}
+                {/* ─────────────────────────────────────────────── */}
+                IF error IS NOT null:
+                    <div className="error-message">
+                        Error: {error}
+                    </div>
+
+                {/* ─────────────────────────────────────────────── */}
+                {/* LOADING INDICATOR */}
+                {/* Shows while data is being fetched */}
+                {/* ─────────────────────────────────────────────── */}
+                IF loading:
+                    <div className="loading">Loading...</div>
+
+                {/* ─────────────────────────────────────────────── */}
+                {/* DASHBOARD CONTENT */}
+                {/* Only shows when not loading and data is available */}
+                {/* ─────────────────────────────────────────────── */}
+                IF NOT loading AND summary IS NOT null:
+                    <>
+                        {/* KPI Summary Cards */}
+                        <KPICards summary={summary} />
+
+                        {/* Traffic Timeseries Chart */}
+                        <TimeSeriesChart data={timeseries} />
+
+                        {/* AI-Generated Trend Suggestions */}
+                        <TrendSuggestions suggestions={suggestions} />
+                    </>
+            </div>
+        </div>
+    )
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT DEFAULT App
+
+/**
+ * Component Hierarchy:
+ *
+ * App (this component)
+ * ├── Header (static)
+ * └── Container
+ *     ├── DateRangeSelector (interactive controls)
+ *     ├── Error Message (conditional)
+ *     ├── Loading Indicator (conditional)
+ *     └── Dashboard Content (conditional)
+ *         ├── KPICards (displays summary stats)
+ *         ├── TimeSeriesChart (visualizes trends)
+ *         └── TrendSuggestions (displays AI insights)
+ */

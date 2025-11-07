@@ -1,0 +1,241 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/services/api.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   API client layer that abstracts all HTTP communication with the backend.
+ *   Provides clean JavaScript functions for fetching dashboard data.
+ *   Centralizes API configuration and error handling.
+ *
+ * SYSTEM FIT:
+ *   - Single source of truth for backend communication
+ *   - Used by App.jsx and potentially other components
+ *   - Configures backend URL from environment variables
+ *   - Uses axios for HTTP requests with timeout configuration
+ *   - Abstracts API details from UI components
+ *
+ * KEY DEPENDENCIES:
+ *   → axios - HTTP client library
+ *   → Backend API service (backend/src/index.ts)
+ *   → Environment variables (VITE_BACKEND_URL)
+ *
+ * CALLED BY:
+ *   - App.jsx fetchData() function
+ *   - Any component that needs backend data
+ *
+ * CALLS:
+ *   - Backend API endpoints:
+ *     - GET /dashboard/summary
+ *     - GET /dashboard/timeseries
+ *     - GET /trends/suggestions
+ *     - GET /metrics/traffic
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT axios (HTTP client library)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Backend URL Configuration
+ * - Production: Set via VITE_BACKEND_URL environment variable
+ * - Development: Defaults to localhost:3000
+ */
+BACKEND_URL = ENV_VAR("VITE_BACKEND_URL") OR "http://localhost:3000"
+
+
+/**
+ * Create configured axios instance
+ * All API calls use this instance for consistent behavior
+ */
+api_client = CREATE axios.create WITH:
+    baseURL: BACKEND_URL
+    timeout: 10000  // 10 seconds - fail if request takes longer
+
+
+// ═══════════════════════════════════════════════════════════════════
+// API FUNCTION: Get Dashboard Summary
+// Fetches KPI data for summary cards
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT FUNCTION getDashboardSummary(start, end):
+    """
+    Fetches dashboard summary statistics.
+
+    Arguments:
+        start: ISO8601 datetime string (optional)
+        end: ISO8601 datetime string (optional)
+
+    Returns:
+        Object containing:
+            - event_count: number
+            - total_vehicles: number
+            - average_speed: number
+            - min_speed: number
+            - max_speed: number
+            - anomaly_count: number
+            - period: {start, end}
+
+    Called by: App.jsx fetchData()
+    Calls: GET /dashboard/summary endpoint in backend
+    """
+
+    // Build query parameters
+    params = {}
+    IF start IS provided:
+        params.start = start
+    IF end IS provided:
+        params.end = end
+
+    // Make HTTP GET request
+    response = AWAIT api_client.get(
+        path: "/dashboard/summary",
+        query_params: params
+    )
+
+    RETURN response.data
+
+
+// ═══════════════════════════════════════════════════════════════════
+// API FUNCTION: Get Dashboard Timeseries
+// Fetches hourly aggregated data for chart visualization
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT FUNCTION getDashboardTimeseries(start, end):
+    """
+    Fetches timeseries data for chart visualization.
+
+    Arguments:
+        start: ISO8601 datetime string (optional)
+        end: ISO8601 datetime string (optional)
+
+    Returns:
+        Object containing:
+            - timeseries: Array of objects with:
+                - time_bucket: datetime
+                - vehicle_count: number
+                - avg_speed: number
+                - event_count: number
+
+    Called by: App.jsx fetchData()
+    Calls: GET /dashboard/timeseries endpoint in backend
+    """
+
+    params = {}
+    IF start IS provided:
+        params.start = start
+    IF end IS provided:
+        params.end = end
+
+    response = AWAIT api_client.get(
+        path: "/dashboard/timeseries",
+        query_params: params
+    )
+
+    RETURN response.data
+
+
+// ═══════════════════════════════════════════════════════════════════
+// API FUNCTION: Get Trend Suggestions
+// Fetches AI-generated insights from LLM
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT FUNCTION getTrendSuggestions(start, end):
+    """
+    Fetches AI-generated trend suggestions.
+
+    Arguments:
+        start: ISO8601 datetime string (optional)
+        end: ISO8601 datetime string (optional)
+
+    Returns:
+        Object containing:
+            - suggestions: Array of objects with:
+                - id: number
+                - created_at: datetime
+                - time_period_start: datetime
+                - time_period_end: datetime
+                - suggestion_type: string
+                - confidence_level: number
+                - description: string (LLM-generated text)
+                - related_anomalies: array of ids
+                - action_taken: boolean
+
+    Called by: App.jsx fetchData()
+    Calls: GET /trends/suggestions endpoint in backend
+    """
+
+    params = {}
+    IF start IS provided:
+        params.start = start
+    IF end IS provided:
+        params.end = end
+
+    response = AWAIT api_client.get(
+        path: "/trends/suggestions",
+        query_params: params
+    )
+
+    RETURN response.data
+
+
+// ═══════════════════════════════════════════════════════════════════
+// API FUNCTION: Get Traffic Metrics
+// Fetches detailed traffic metrics (alternative endpoint)
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT FUNCTION getTrafficMetrics(start, end):
+    """
+    Fetches detailed traffic metrics.
+    This endpoint provides similar data to dashboard endpoints but
+    with different formatting. May be used for additional analysis.
+
+    Arguments:
+        start: ISO8601 datetime string (optional)
+        end: ISO8601 datetime string (optional)
+
+    Returns:
+        Object containing:
+            - summary: Aggregated statistics
+            - timeseries: Time-bucketed data
+
+    Called by: Components needing detailed traffic data
+    Calls: GET /metrics/traffic endpoint in backend
+    """
+
+    params = {}
+    IF start IS provided:
+        params.start = start
+    IF end IS provided:
+        params.end = end
+
+    response = AWAIT api_client.get(
+        path: "/metrics/traffic",
+        query_params: params
+    )
+
+    RETURN response.data
+
+
+/**
+ * Error Handling:
+ *
+ * All functions use async/await and will throw errors that can be caught
+ * by the calling component.
+ *
+ * Common errors:
+ * - Network errors (backend unreachable)
+ * - Timeout errors (request took > 10 seconds)
+ * - HTTP errors (4xx, 5xx status codes)
+ *
+ * Example usage:
+ *
+ * TRY:
+ *     summary = AWAIT getDashboardSummary(start, end)
+ * CATCH error:
+ *     HANDLE error (show message to user, log, etc.)
+ */

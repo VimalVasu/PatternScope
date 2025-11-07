@@ -1,0 +1,228 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: db/migrations/002_anomalies.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Creates the anomalies table for storing detected traffic anomalies.
+ *   Stores results from anomaly detection algorithms (Z-score, IQR,
+ *   Isolation Forest, LOF). Links back to original traffic events.
+ *
+ * SYSTEM FIT:
+ *   - Second migration in sequence
+ *   - Depends on traffic_events table (foreign key relationship)
+ *   - Stores output from analysis service
+ *   - Queried by dashboard for anomaly counts and details
+ *   - Referenced by trend_suggestions table
+ *
+ * KEY DEPENDENCIES:
+ *   → 001_init.sql - Must run first (creates traffic_events table)
+ *   → analysis/services/analysis.py - Writes to this table
+ *
+ * CALLED BY:
+ *   - db/init.sh migration runner script
+ *   - Runs after 001_init.sql
+ *
+ * CALLS:
+ *   - PostgreSQL DDL commands (CREATE TABLE, CREATE INDEX)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+// ═══════════════════════════════════════════════════════════════════
+// TABLE: anomalies
+// Stores detected traffic anomalies with metadata
+// ═══════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS anomalies (
+
+    // ─────────────────────────────────────────────────────────────
+    // PRIMARY KEY
+    // ─────────────────────────────────────────────────────────────
+    id SERIAL PRIMARY KEY,
+    /**
+     * Auto-incrementing integer ID
+     * Used by: trend_suggestions.related_anomalies array
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // TIMESTAMPS
+    // ─────────────────────────────────────────────────────────────
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    /**
+     * When this anomaly was detected by the analysis service
+     * Used for: Temporal analysis, filtering by detection time
+     * Indexed for performance
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // RELATIONSHIP TO TRAFFIC EVENT
+    // ─────────────────────────────────────────────────────────────
+    traffic_event_id INTEGER REFERENCES traffic_events(id),
+    /**
+     * Foreign key to the traffic event that was flagged as anomalous
+     * Relationship: Many anomalies can point to same event (different algorithms)
+     * Used for: Joining back to original event data for details
+     * Indexed for performance
+     * On delete: CASCADE (if event deleted, anomalies deleted too)
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // DETECTION METADATA
+    // ─────────────────────────────────────────────────────────────
+    anomaly_type VARCHAR(100) NOT NULL,
+    /**
+     * Which algorithm detected this anomaly
+     * Values: 'zscore', 'iqr', 'isolation_forest', 'lof'
+     * Used for: Algorithm comparison, filtering by detection method
+     * Indexed for performance
+     */
+
+    confidence_score FLOAT NOT NULL,
+    /**
+     * Confidence level (0-1)
+     * Higher = more confident it's an anomaly
+     * Calculated differently per algorithm:
+     *   - Z-score: Based on standard deviations
+     *   - IQR: Based on distance from bounds
+     *   - Isolation Forest: Based on isolation score
+     *   - LOF: Based on outlier factor
+     * Used for: Prioritization, deduplication (keep highest confidence)
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // ANOMALY DETAILS (JSONB)
+    // ─────────────────────────────────────────────────────────────
+    affected_metrics JSONB,
+    /**
+     * Which metrics were anomalous
+     * Example: ["vehicle_count", "avg_speed"]
+     * Used for: Understanding what was unusual
+     */
+
+    description TEXT,
+    /**
+     * Human-readable description of the anomaly
+     * Example: "vehicle_count value 150 is 4.2 standard deviations from mean"
+     * Used for: Display in UI, logging, debugging
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // RESOLUTION TRACKING
+    // ─────────────────────────────────────────────────────────────
+    is_resolved BOOLEAN DEFAULT FALSE,
+    /**
+     * Has this anomaly been investigated/resolved?
+     * Used for: Workflow management, filtering unresolved anomalies
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // AUDIT FIELD
+    // ─────────────────────────────────────────────────────────────
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    /**
+     * When this record was created
+     * Used for: Audit trails
+     */
+)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// PERFORMANCE INDEXES
+// Optimize common query patterns
+// ═══════════════════════════════════════════════════════════════════
+
+CREATE INDEX IF NOT EXISTS idx_anomalies_detected_at
+    ON anomalies(detected_at)
+/**
+ * Optimizes: Time-based filtering
+ * Used by:
+ *   - Dashboard querying recent anomalies
+ *   - Time-range based anomaly analysis
+ *
+ * Example queries:
+ *   SELECT COUNT(*) FROM anomalies WHERE detected_at >= '2025-11-07'
+ */
+
+
+CREATE INDEX IF NOT EXISTS idx_anomalies_traffic_event_id
+    ON anomalies(traffic_event_id)
+/**
+ * Optimizes: Joining back to traffic_events
+ * Used by:
+ *   - Fetching anomaly details with event data
+ *   - Checking if event has anomalies
+ *
+ * Example queries:
+ *   SELECT * FROM anomalies WHERE traffic_event_id = 12345
+ *   SELECT te.*, a.* FROM traffic_events te
+ *   JOIN anomalies a ON te.id = a.traffic_event_id
+ */
+
+
+CREATE INDEX IF NOT EXISTS idx_anomalies_type
+    ON anomalies(anomaly_type)
+/**
+ * Optimizes: Filtering by detection algorithm
+ * Used by:
+ *   - Algorithm performance comparison
+ *   - Filtering by specific detection methods
+ *
+ * Example queries:
+ *   SELECT COUNT(*) FROM anomalies WHERE anomaly_type = 'isolation_forest'
+ *   SELECT * FROM anomalies WHERE anomaly_type IN ('zscore', 'iqr')
+ */
+
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * DATA FLOW:
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * 1. Analysis Service → POST /run-analysis
+ *    a. Fetch traffic_events from database
+ *    b. Run anomaly detection algorithms
+ *    c. INSERT INTO anomalies
+ *       Multiple rows if multiple algorithms detect same event
+ *    d. Deduplicate (keep highest confidence per event)
+ *
+ * 2. Dashboard → GET /dashboard/summary
+ *    SELECT COUNT(*) FROM anomalies
+ *    WHERE detected_at BETWEEN $1 AND $2
+ *
+ * 3. Analysis Service → generate_trend_suggestions()
+ *    SELECT * FROM anomalies
+ *    WHERE detected_at >= $1
+ *    ORDER BY confidence_score DESC
+ *    LIMIT 10
+ *    → Pass to LLM for insights
+ *
+ * 4. Dashboard Display
+ *    SELECT a.*, te.timestamp, te.location_id
+ *    FROM anomalies a
+ *    JOIN traffic_events te ON a.traffic_event_id = te.id
+ *    WHERE a.is_resolved = false
+ *    ORDER BY a.confidence_score DESC
+ */
+
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * DEDUPLICATION STRATEGY:
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * Multiple algorithms may detect the same event as anomalous.
+ * The analysis service handles deduplication BEFORE inserting:
+ *
+ * Algorithm Output:
+ *   Event 100 → zscore (confidence: 0.85)
+ *   Event 100 → iqr (confidence: 0.92)
+ *   Event 100 → isolation_forest (confidence: 0.78)
+ *
+ * Deduplication Logic:
+ *   Keep only highest confidence per traffic_event_id
+ *
+ * Result Stored:
+ *   Event 100 → iqr (confidence: 0.92)
+ *
+ * This avoids duplicate rows and provides best detection per event.
+ */

@@ -1,0 +1,68 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/db.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Manages the PostgreSQL database connection pool for the backend service.
+ *   Provides a shared, reusable pool of database connections that all route
+ *   handlers can use to execute queries efficiently.
+ *
+ * SYSTEM FIT:
+ *   - Central database access point for all backend routes
+ *   - Uses connection pooling to handle multiple concurrent requests efficiently
+ *   - Connects to the PostgreSQL database container in the Docker network
+ *   - Shared by all route modules (traffic, dashboard, trends, health)
+ *
+ * KEY DEPENDENCIES:
+ *   → PostgreSQL database (external service)
+ *   → Environment variables for connection config
+ *
+ * CALLED BY:
+ *   - routes/traffic.ts - For inserting traffic events and querying metrics
+ *   - routes/dashboard.ts - For dashboard summary and timeseries queries
+ *   - routes/trends.ts - For querying trend suggestions
+ *   - routes/health.ts - For database health checks
+ *
+ * CALLS:
+ *   - PostgreSQL server via TCP connection
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+// ═══════════════════════════════════════════════════════════════════
+// CONNECTION POOL CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════
+
+CREATE database_connection_pool WITH:
+    host = ENV_VAR("DB_HOST", default: "db")
+    port = ENV_VAR("DB_PORT", default: 5432)
+    database = ENV_VAR("DB_NAME", default: "patternscope")
+    user = ENV_VAR("DB_USER", default: "postgres")
+    password = ENV_VAR("DB_PASSWORD", default: "postgres")
+
+    // Pool configuration for performance
+    max_connections = 20                  // Maximum number of simultaneous connections
+    idle_timeout_ms = 30000              // Close idle connections after 30 seconds
+    connection_timeout_ms = 2000         // Fail fast if can't connect within 2 seconds
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT database_connection_pool
+
+/**
+ * Usage Pattern in Route Handlers:
+ *
+ * IMPORT database_connection_pool FROM db.pseudo
+ *
+ * result = EXECUTE_QUERY database_connection_pool:
+ *     SQL: "SELECT * FROM traffic_events WHERE timestamp > $1"
+ *     PARAMS: [start_time]
+ *
+ * The pool automatically:
+ * - Assigns an available connection from the pool
+ * - Executes the query
+ * - Returns the connection to the pool for reuse
+ */

@@ -1,0 +1,132 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/routes/trends.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Provides access to AI-generated trend suggestions and insights.
+ *   Retrieves LLM-generated recommendations that were created by the
+ *   analysis service based on detected anomalies.
+ *
+ * SYSTEM FIT:
+ *   - Serves pre-generated AI insights to the dashboard
+ *   - Reads from trend_suggestions table (written by analysis service)
+ *   - Provides actionable recommendations for traffic management
+ *   - Part of the AI feedback loop: Anomalies → LLM → Suggestions → Dashboard
+ *
+ * KEY DEPENDENCIES:
+ *   → db.ts - Database connection pool
+ *   → trend_suggestions table - Created by analysis/services/llm_client.py
+ *
+ * CALLED BY:
+ *   - dashboard/src/services/api.js - getTrendSuggestions()
+ *
+ * CALLS:
+ *   - PostgreSQL database (SELECT from trend_suggestions table)
+ *
+ * DATA FLOW:
+ *   1. Analysis service detects anomalies
+ *   2. Analysis service calls Ollama LLM
+ *   3. LLM generates human-readable suggestions
+ *   4. Analysis service stores suggestions in trend_suggestions table
+ *   5. This endpoint retrieves those suggestions for display
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT database_connection_pool FROM ../db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /trends/suggestions
+// High-level flow: Parse filters → Query trend_suggestions table → Return results
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/trends/suggestions":
+    """
+    Retrieves AI-generated trend suggestions for a given time period.
+    Returns actionable insights about detected traffic anomalies.
+
+    Query Parameters:
+        start (optional): Filter suggestions created after this datetime
+        end (optional): Filter suggestions created before this datetime
+
+    Called by: dashboard/App.jsx via api.getTrendSuggestions()
+    Used in: TrendSuggestions component to display AI insights
+    """
+
+    EXTRACT start_time FROM query_parameters (optional)
+    EXTRACT end_time FROM query_parameters (optional)
+
+    TRY:
+        // ─────────────────────────────────────────────────────────────
+        // Build dynamic WHERE clause for filtering
+        // ─────────────────────────────────────────────────────────────
+        conditions = []
+        parameters = []
+
+        IF start_time IS provided:
+            ADD "created_at >= $1" TO conditions
+            ADD start_time TO parameters
+
+        IF end_time IS provided:
+            ADD "created_at <= $N" TO conditions
+            ADD end_time TO parameters
+
+        where_clause = IF conditions THEN "WHERE " + JOIN(conditions, " AND ") ELSE ""
+
+        // ─────────────────────────────────────────────────────────────
+        // Query: Retrieve trend suggestions
+        // ─────────────────────────────────────────────────────────────
+        SUGGESTIONS_QUERY = """
+            SELECT
+                id,
+                created_at,                  // When this suggestion was generated
+                time_period_start,           // Start of analyzed period
+                time_period_end,             // End of analyzed period
+                suggestion_type,             // Type: 'anomaly_summary', etc.
+                confidence_level,            // LLM confidence (0-1)
+                description,                 // Human-readable AI-generated text
+                related_anomalies,           // Array of traffic_event_ids
+                action_taken                 // Has this been acted upon? (boolean)
+            FROM trend_suggestions
+            """ + where_clause + """
+            ORDER BY created_at DESC
+            LIMIT 50
+        """
+
+        result = EXECUTE database_connection_pool.query(
+            SQL: SUGGESTIONS_QUERY,
+            PARAMS: parameters
+        )
+
+        // Return array of suggestions
+        RETURN HTTP 200 (OK):
+            suggestions: result.all_rows
+
+        /**
+         * Example suggestion structure:
+         * {
+         *   id: 42,
+         *   created_at: "2025-11-07T10:30:00Z",
+         *   time_period_start: "2025-11-07T09:00:00Z",
+         *   time_period_end: "2025-11-07T10:00:00Z",
+         *   suggestion_type: "anomaly_summary",
+         *   confidence_level: 0.8,
+         *   description: "• Unusual speed patterns detected during rush hour\n• Consider investigating...",
+         *   related_anomalies: [145, 146, 147, 148],
+         *   action_taken: false
+         * }
+         */
+
+    CATCH database_error:
+        LOG_ERROR database_error
+
+        RETURN HTTP 500 (Internal Server Error):
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT trends_routes_module

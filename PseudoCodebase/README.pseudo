@@ -1,0 +1,449 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * PATTERNSCOPE - PSEUDOCODE DOCUMENTATION
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * This directory contains a complete pseudocode representation of the
+ * PatternScope traffic monitoring and anomaly detection system.
+ *
+ * PURPOSE:
+ *   This "PseudoBase" serves as a primer to understand the codebase
+ *   architecture, data flows, and system interactions before diving
+ *   into the actual implementation code.
+ *
+ * WHAT IS PATTERNSCOPE?
+ *   PatternScope is a comprehensive AI-powered traffic monitoring system
+ *   that ingests real-time traffic data, detects anomalies using multiple
+ *   ML algorithms, generates actionable insights using LLM, and presents
+ *   everything in an interactive dashboard.
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// SYSTEM ARCHITECTURE OVERVIEW
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │                     PATTERNSCOPE SYSTEM                         │
+ * └─────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌──────────────┐
+ *  │  Edge Mock   │  (Python) - Simulates traffic sensors
+ *  │  Simulator   │  Generates realistic traffic data
+ *  └──────┬───────┘
+ *         │ HTTP POST /ingest/traffic
+ *         ▼
+ *  ┌──────────────┐
+ *  │   Backend    │  (TypeScript/Fastify) - REST API
+ *  │   Service    │  - Ingests traffic events
+ *  └──────┬───────┘  - Serves dashboard data
+ *         │ Stores data in PostgreSQL
+ *         ▼
+ *  ┌──────────────┐
+ *  │  PostgreSQL  │  (Database) - Persistent storage
+ *  │   Database   │  - traffic_events
+ *  └──────┬───────┘  - anomalies
+ *         │          - trend_suggestions
+ *         │
+ *    ┌────┴─────┐
+ *    ▼          ▼
+ *  ┌─────┐  ┌─────────────┐
+ *  │Dash │  │  Analysis   │  (Python/FastAPI) - ML service
+ *  │board│◄─┤   Service   │  - Anomaly detection
+ *  └─────┘  └──────┬──────┘  - LLM integration
+ *                  │
+ *                  ▼
+ *           ┌─────────────┐
+ *           │   Ollama    │  (LLM) - AI insights
+ *           │  (llama2)   │  Generates suggestions
+ *           └─────────────┘
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DIRECTORY STRUCTURE
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * PseudoCodebase/
+ * │
+ * ├── backend/                          # TypeScript/Fastify REST API
+ * │   └── src/
+ * │       ├── index.pseudo              # Server entry point
+ * │       ├── db.pseudo                 # Database connection pool
+ * │       └── routes/
+ * │           ├── traffic.pseudo        # Traffic ingestion & metrics
+ * │           ├── dashboard.pseudo      # Dashboard data endpoints
+ * │           ├── trends.pseudo         # AI suggestions endpoint
+ * │           └── health.pseudo         # Health check
+ * │
+ * ├── analysis/                         # Python/FastAPI ML service
+ * │   ├── main.pseudo                   # Analysis service entry point
+ * │   └── services/
+ * │       ├── analysis.pseudo           # Anomaly detection algorithms
+ * │       ├── llm_client.pseudo         # Ollama LLM integration
+ * │       └── db.pseudo                 # Database access layer
+ * │
+ * ├── dashboard/                        # React/Vite frontend
+ * │   └── src/
+ * │       ├── main.pseudo               # React entry point
+ * │       ├── App.pseudo                # Main application component
+ * │       ├── services/
+ * │       │   └── api.pseudo            # Backend API client
+ * │       └── components/
+ * │           ├── DateRangeSelector.pseudo   # Time range picker
+ * │           ├── KPICards.pseudo            # Summary statistics
+ * │           ├── TimeSeriesChart.pseudo     # Traffic visualization
+ * │           └── TrendSuggestions.pseudo    # AI insights display
+ * │
+ * ├── edge-mock/                        # Python traffic simulator
+ * │   └── publisher.pseudo              # Traffic data generator
+ * │
+ * └── db/                               # Database schema
+ *     └── migrations/
+ *         ├── 001_init.pseudo           # traffic_events table
+ *         ├── 002_anomalies.pseudo      # anomalies table
+ *         └── 003_trend_suggestions.pseudo  # trend_suggestions table
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// KEY DATA FLOWS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * FLOW 1: Traffic Data Ingestion
+ * ───────────────────────────────────────────────────────────────────
+ * 1. Edge Mock generates realistic traffic event
+ *    - Simulates rush hour, night traffic, random anomalies
+ *
+ * 2. POST to backend /ingest/traffic
+ *    - Validates event schema
+ *    - Inserts into traffic_events table
+ *
+ * 3. Data available for querying
+ *    - Dashboard can display
+ *    - Analysis service can process
+ */
+
+/**
+ * FLOW 2: Anomaly Detection
+ * ───────────────────────────────────────────────────────────────────
+ * 1. Analysis service triggered (POST /run-analysis)
+ *
+ * 2. Fetch traffic events from database
+ *    - Filter by time range
+ *    - Convert to pandas DataFrame
+ *
+ * 3. Run multiple detection algorithms in parallel:
+ *    - Z-Score: Statistical outlier detection (3σ)
+ *    - IQR: Interquartile range method
+ *    - Isolation Forest: ML ensemble method
+ *    - LOF: Local outlier factor (density-based)
+ *
+ * 4. Deduplicate results
+ *    - Keep highest confidence per event
+ *
+ * 5. Store in anomalies table
+ *    - Links to original traffic event
+ *    - Includes confidence score and description
+ */
+
+/**
+ * FLOW 3: AI Insight Generation
+ * ───────────────────────────────────────────────────────────────────
+ * 1. If anomalies detected, trigger LLM
+ *
+ * 2. Build context-rich prompt
+ *    - Group anomalies by detection method
+ *    - Include time period and counts
+ *
+ * 3. Call Ollama LLM (llama2)
+ *    - POST to http://ollama:11434/api/generate
+ *    - Receive human-readable suggestions
+ *
+ * 4. Store in trend_suggestions table
+ *    - Links to related anomaly IDs
+ *    - Includes confidence level
+ *
+ * 5. Display in dashboard
+ *    - TrendSuggestions component renders AI text
+ */
+
+/**
+ * FLOW 4: Dashboard Visualization
+ * ───────────────────────────────────────────────────────────────────
+ * 1. User opens dashboard in browser
+ *
+ * 2. App.jsx fetches data (parallel requests):
+ *    - GET /dashboard/summary → KPI data
+ *    - GET /dashboard/timeseries → Chart data
+ *    - GET /trends/suggestions → AI insights
+ *
+ * 3. Renders components:
+ *    - KPICards: Total events, vehicles, speed, anomalies
+ *    - TimeSeriesChart: Vehicle count and speed over time
+ *    - TrendSuggestions: AI-generated recommendations
+ *
+ * 4. User can change date range and refresh
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DATABASE SCHEMA
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * traffic_events (Core data table)
+ * ───────────────────────────────────────────────────────────────────
+ * id                    SERIAL PRIMARY KEY
+ * timestamp             TIMESTAMPTZ - When event occurred
+ * location_id           INTEGER - Sensor location
+ * vehicle_count         INTEGER - Number of vehicles
+ * avg_speed             FLOAT - Average speed (km/h)
+ * min_speed             FLOAT - Minimum speed
+ * max_speed             FLOAT - Maximum speed
+ * color_counts          JSONB - Vehicle color distribution
+ * inter_arrival_stats   JSONB - Arrival time statistics
+ * traffic_density_score FLOAT - Density metric (0-1)
+ * raw_features          JSONB - Additional sensor data
+ * created_at            TIMESTAMPTZ - Record creation time
+ *
+ * Indexes: timestamp, location_id, (timestamp, location_id)
+ */
+
+/**
+ * anomalies (Detection results)
+ * ───────────────────────────────────────────────────────────────────
+ * id                 SERIAL PRIMARY KEY
+ * detected_at        TIMESTAMPTZ - When anomaly was detected
+ * traffic_event_id   INTEGER FK → traffic_events(id)
+ * anomaly_type       VARCHAR - Algorithm: zscore, iqr, isolation_forest, lof
+ * confidence_score   FLOAT - Detection confidence (0-1)
+ * affected_metrics   JSONB - Which metrics were anomalous
+ * description        TEXT - Human-readable description
+ * is_resolved        BOOLEAN - Has been addressed?
+ * created_at         TIMESTAMPTZ - Record creation time
+ *
+ * Indexes: detected_at, traffic_event_id, anomaly_type
+ */
+
+/**
+ * trend_suggestions (AI insights)
+ * ───────────────────────────────────────────────────────────────────
+ * id                  SERIAL PRIMARY KEY
+ * created_at          TIMESTAMPTZ - When suggestion was generated
+ * time_period_start   TIMESTAMPTZ - Analysis window start
+ * time_period_end     TIMESTAMPTZ - Analysis window end
+ * suggestion_type     VARCHAR - Category: anomaly_summary, etc.
+ * confidence_level    FLOAT - LLM confidence (0-1)
+ * description         TEXT - AI-generated recommendations
+ * related_anomalies   INTEGER[] - Array of anomaly IDs
+ * action_taken        BOOLEAN - Has been acted upon?
+ *
+ * Indexes: created_at, (time_period_start, time_period_end), suggestion_type
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ANOMALY DETECTION ALGORITHMS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * 1. Z-SCORE (Statistical)
+ * ───────────────────────────────────────────────────────────────────
+ * Method: Flags values more than 3 standard deviations from mean
+ * Formula: z = |value - mean| / std_dev
+ * Good for: Normally distributed data, extreme outliers
+ * Metrics analyzed: vehicle_count, avg_speed, traffic_density_score
+ */
+
+/**
+ * 2. IQR (Statistical)
+ * ───────────────────────────────────────────────────────────────────
+ * Method: Flags values outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
+ * Good for: Robust detection, less sensitive to extremes
+ * Metrics analyzed: vehicle_count, avg_speed, traffic_density_score
+ */
+
+/**
+ * 3. ISOLATION FOREST (Machine Learning)
+ * ───────────────────────────────────────────────────────────────────
+ * Method: Ensemble of decision trees isolating anomalies
+ * Good for: Multi-dimensional anomalies, complex patterns
+ * Features: vehicle_count, avg_speed, traffic_density_score
+ * Parameters: contamination=0.1 (expect 10% anomalies)
+ */
+
+/**
+ * 4. LOF - Local Outlier Factor (Machine Learning)
+ * ───────────────────────────────────────────────────────────────────
+ * Method: Density-based, compares local density to neighbors
+ * Good for: Cluster-based anomalies, density deviations
+ * Features: vehicle_count, avg_speed, traffic_density_score
+ * Parameters: n_neighbors=20, contamination=0.1
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// TECHNOLOGY STACK
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Backend Service:
+ *   - Language: TypeScript
+ *   - Framework: Fastify (fast web framework)
+ *   - Database Driver: pg (PostgreSQL)
+ *   - Features: JSON schema validation, logging, CORS
+ *
+ * Analysis Service:
+ *   - Language: Python
+ *   - Framework: FastAPI (async web framework)
+ *   - ML Libraries: scikit-learn, pandas, numpy
+ *   - Database: psycopg2
+ *   - HTTP Client: httpx (async)
+ *
+ * Dashboard:
+ *   - Framework: React 18 with hooks
+ *   - Build Tool: Vite (fast dev server)
+ *   - HTTP Client: axios
+ *   - Charts: Recharts (assumed)
+ *
+ * Edge Mock:
+ *   - Language: Python
+ *   - HTTP Client: requests
+ *   - Purpose: Development/testing data generator
+ *
+ * Database:
+ *   - PostgreSQL 15
+ *   - JSONB support for semi-structured data
+ *   - Timezone-aware timestamps
+ *
+ * LLM:
+ *   - Ollama (self-hosted)
+ *   - Model: llama2
+ *   - Purpose: Generate human-readable insights
+ *
+ * Infrastructure:
+ *   - Docker & Docker Compose
+ *   - Health checks for service orchestration
+ *   - Custom bridge network
+ *   - Persistent volumes for data
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HOW TO READ THIS PSEUDOCODE
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * 1. Start with entry points:
+ *    - backend/src/index.pseudo
+ *    - analysis/main.pseudo
+ *    - dashboard/src/main.pseudo
+ *    - edge-mock/publisher.pseudo
+ *
+ * 2. Follow the data flows:
+ *    - Ingestion: edge-mock → backend → database
+ *    - Detection: analysis service → database
+ *    - Visualization: dashboard → backend → display
+ *
+ * 3. Understand the database schema:
+ *    - db/migrations/*.pseudo files
+ *    - See table relationships and indexes
+ *
+ * 4. Dive into components as needed:
+ *    - Each file has a detailed header explaining its role
+ *    - Comments explain the "why" not just "what"
+ *    - High-level flows described before implementation details
+ *
+ * 5. Focus on architecture, not syntax:
+ *    - Pseudocode is language-agnostic
+ *    - Emphasizes concepts and patterns
+ *    - Highlights integration points
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// RECOMMENDED READING ORDER
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * For New Developers:
+ * 1. This README (system overview)
+ * 2. Database migrations (understand data model)
+ * 3. Backend index.pseudo (understand API structure)
+ * 4. Backend routes (understand endpoints)
+ * 5. Analysis service (understand ML pipeline)
+ * 6. Dashboard App.pseudo (understand UI flow)
+ *
+ * For Feature Development:
+ * 1. Identify which service handles the feature
+ * 2. Read the service entry point
+ * 3. Follow the code flow through components
+ * 4. Check database schema for related tables
+ *
+ * For Debugging:
+ * 1. Trace the data flow from source to destination
+ * 2. Check integration points between services
+ * 3. Review error handling patterns
+ * 4. Understand retry logic and timeouts
+ */
+
+
+// ═══════════════════════════════════════════════════════════════════
+// KEY DESIGN PATTERNS
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * 1. Microservices Architecture
+ *    - Separate services for different concerns
+ *    - Independent scaling and deployment
+ *    - Clear API boundaries
+ *
+ * 2. Connection Pooling
+ *    - Efficient database connection reuse
+ *    - Handles concurrent requests
+ *
+ * 3. Retry Logic with Exponential Backoff
+ *    - Fault-tolerant network communication
+ *    - Edge mock retries failed publishes
+ *
+ * 4. Ensemble Detection
+ *    - Multiple algorithms for robust anomaly detection
+ *    - Deduplication keeps best result per event
+ *
+ * 5. Async/Await Patterns
+ *    - Non-blocking I/O operations
+ *    - Parallel API calls for performance
+ *
+ * 6. Schema Validation
+ *    - Backend validates incoming data
+ *    - Fail fast on invalid requests
+ *
+ * 7. Separation of Concerns
+ *    - Presentation (Dashboard)
+ *    - Business Logic (Backend, Analysis)
+ *    - Data Storage (PostgreSQL)
+ *    - AI/ML (Analysis service, Ollama)
+ */
+
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * WELCOME TO PATTERNSCOPE!
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * This pseudocode documentation is your map to understanding the system.
+ * Use it to get oriented before diving into the actual implementation.
+ *
+ * Each .pseudo file contains:
+ * - Purpose and responsibility
+ * - System integration points
+ * - Key dependencies
+ * - High-level flow descriptions
+ * - Detailed pseudocode with comments
+ *
+ * Happy exploring!
+ */

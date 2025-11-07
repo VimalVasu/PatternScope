@@ -1,0 +1,214 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: db/migrations/001_init.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Initial database schema creation - creates the core traffic_events table.
+ *   This is the foundation table that stores all raw traffic data from edge devices.
+ *   First migration in the sequence, establishes the primary data model.
+ *
+ * SYSTEM FIT:
+ *   - First migration executed during database initialization
+ *   - Creates the main data ingestion table
+ *   - Defines schema for traffic event storage
+ *   - Sets up performance indexes for common queries
+ *   - Critical for entire system - all other tables reference this one
+ *
+ * KEY DEPENDENCIES:
+ *   → PostgreSQL database
+ *   → Must run before 002_anomalies.sql (foreign key dependency)
+ *
+ * CALLED BY:
+ *   - db/init.sh migration runner script
+ *   - Docker Compose initialization sequence
+ *
+ * CALLS:
+ *   - PostgreSQL DDL commands (CREATE TABLE, CREATE INDEX)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+// ═══════════════════════════════════════════════════════════════════
+// TABLE: traffic_events
+// Core table storing all traffic data from edge sensors
+// ═══════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS traffic_events (
+
+    // ─────────────────────────────────────────────────────────────
+    // PRIMARY KEY
+    // ─────────────────────────────────────────────────────────────
+    id SERIAL PRIMARY KEY,
+    /**
+     * Auto-incrementing integer ID
+     * Used as foreign key by anomalies table
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // CORE REQUIRED FIELDS
+    // Every traffic event must have these
+    // ─────────────────────────────────────────────────────────────
+    timestamp TIMESTAMPTZ NOT NULL,
+    /**
+     * When this event was captured
+     * Timezone-aware timestamp
+     * Used for: Time-series queries, aggregations, filtering
+     * Indexed for performance
+     */
+
+    location_id INTEGER NOT NULL,
+    /**
+     * Which sensor/location captured this event
+     * References: Virtual location registry (1, 2, 3, 4, 5)
+     * Used for: Location-based filtering and analysis
+     * Indexed for performance
+     */
+
+    vehicle_count INTEGER NOT NULL,
+    /**
+     * Number of vehicles detected in this event
+     * Used for: Traffic volume analysis, congestion detection
+     * Analyzed by: Z-score, IQR, Isolation Forest, LOF algorithms
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // SPEED METRICS (Optional but typically provided)
+    // ─────────────────────────────────────────────────────────────
+    avg_speed FLOAT,
+    /**
+     * Average vehicle speed (km/h)
+     * Used for: Flow analysis, congestion detection, anomaly detection
+     * Analyzed by: All anomaly detection algorithms
+     */
+
+    min_speed FLOAT,
+    /**
+     * Minimum speed observed (km/h)
+     * Used for: Speed variation analysis
+     */
+
+    max_speed FLOAT,
+    /**
+     * Maximum speed observed (km/h)
+     * Used for: Speed variation analysis, speeding detection
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // RICH DATA (JSONB fields)
+    // Semi-structured data for flexible analysis
+    // ─────────────────────────────────────────────────────────────
+    color_counts JSONB,
+    /**
+     * Distribution of vehicle colors
+     * Example: {"white": 12, "black": 8, "silver": 5}
+     * Used for: Vehicle classification, pattern analysis
+     */
+
+    inter_arrival_stats JSONB,
+    /**
+     * Statistics on time between vehicle detections
+     * Example: {"mean": 3.5, "std": 1.2, "min": 0.5, "max": 8.0}
+     * Used for: Flow pattern analysis
+     */
+
+    traffic_density_score FLOAT,
+    /**
+     * Calculated density metric (0-1 scale)
+     * Higher = more congested
+     * Used for: Congestion analysis, anomaly detection
+     * Analyzed by: All anomaly detection algorithms
+     */
+
+    raw_features JSONB,
+    /**
+     * Additional sensor data and metadata
+     * Example: {"weather": "clear", "visibility": "good"}
+     * Used for: Context-aware analysis, feature engineering
+     */
+
+    // ─────────────────────────────────────────────────────────────
+    // AUDIT FIELD
+    // ─────────────────────────────────────────────────────────────
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    /**
+     * When this record was inserted into database
+     * Different from 'timestamp' which is event capture time
+     * Used for: Audit trails, data lineage
+     */
+)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// PERFORMANCE INDEXES
+// Optimize common query patterns
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Index Strategy:
+ * - timestamp: Most queries filter by time range
+ * - location_id: Location-based filtering is common
+ * - Composite index: Optimizes queries filtering by both
+ */
+
+CREATE INDEX IF NOT EXISTS idx_traffic_events_timestamp
+    ON traffic_events(timestamp)
+/**
+ * Optimizes: Time-range queries
+ * Used by:
+ *   - Dashboard timeseries endpoint
+ *   - Analysis service data fetching
+ *   - Metrics aggregation
+ *
+ * Example queries:
+ *   SELECT * FROM traffic_events WHERE timestamp >= '2025-11-07 00:00:00'
+ *   SELECT COUNT(*) FROM traffic_events WHERE timestamp BETWEEN $1 AND $2
+ */
+
+
+CREATE INDEX IF NOT EXISTS idx_traffic_events_location_id
+    ON traffic_events(location_id)
+/**
+ * Optimizes: Location-based filtering
+ * Used by: Location-specific analysis and reporting
+ *
+ * Example queries:
+ *   SELECT * FROM traffic_events WHERE location_id = 3
+ */
+
+
+CREATE INDEX IF NOT EXISTS idx_traffic_events_timestamp_location
+    ON traffic_events(timestamp, location_id)
+/**
+ * Optimizes: Combined time and location queries
+ * Used by: Location-specific time-series analysis
+ *
+ * Example queries:
+ *   SELECT * FROM traffic_events
+ *   WHERE timestamp >= $1 AND location_id = $2
+ *   ORDER BY timestamp
+ */
+
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * DATA FLOW:
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * 1. Edge Mock → POST /ingest/traffic → Backend
+ *    INSERT INTO traffic_events VALUES (...)
+ *
+ * 2. Dashboard → GET /dashboard/timeseries → Backend
+ *    SELECT DATE_TRUNC('hour', timestamp), ...
+ *    FROM traffic_events
+ *    WHERE timestamp BETWEEN $1 AND $2
+ *    GROUP BY time_bucket
+ *
+ * 3. Analysis Service → fetch_traffic_events()
+ *    SELECT id, timestamp, vehicle_count, avg_speed, ...
+ *    FROM traffic_events
+ *    WHERE timestamp >= $1
+ *    ORDER BY timestamp
+ *
+ * 4. Anomaly Detection → Writes to anomalies table
+ *    (see 002_anomalies.sql)
+ */

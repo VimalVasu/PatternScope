@@ -1,0 +1,94 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/routes/health.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Provides health check endpoint for monitoring and orchestration.
+ *   Verifies that the backend service is running and can connect to
+ *   the PostgreSQL database.
+ *
+ * SYSTEM FIT:
+ *   - Used by Docker Compose health checks to determine service readiness
+ *   - Used by edge-mock publisher to wait for backend before sending data
+ *   - Used by monitoring systems to detect service outages
+ *   - Critical for container orchestration and startup sequencing
+ *
+ * KEY DEPENDENCIES:
+ *   → db.ts - Database connection pool
+ *   → PostgreSQL database availability
+ *
+ * CALLED BY:
+ *   - Docker Compose healthcheck configuration
+ *   - edge-mock/publisher.py startup sequence
+ *   - External monitoring tools
+ *
+ * CALLS:
+ *   - PostgreSQL database (simple SELECT 1 query)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT database_connection_pool FROM ../db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /health
+// High-level flow: Test database connection → Return status
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/health":
+    """
+    Health check endpoint that verifies service and database connectivity.
+    Returns HTTP 200 if healthy, HTTP 503 if unhealthy.
+
+    Called by: Docker health checks, edge-mock startup, monitoring systems
+    Purpose: Service discovery and readiness verification
+    """
+
+    TRY:
+        // ─────────────────────────────────────────────────────────────
+        // Test database connection with simple query
+        // ─────────────────────────────────────────────────────────────
+        EXECUTE database_connection_pool.query(
+            SQL: "SELECT 1"
+            // This query does nothing but verify we can connect to the database
+        )
+
+        // ─────────────────────────────────────────────────────────────
+        // Success: Service is healthy
+        // ─────────────────────────────────────────────────────────────
+        RETURN HTTP 200 (OK):
+            status: "ok"
+            timestamp: current_datetime_ISO8601
+            service: "backend"
+            database: "connected"
+
+    CATCH database_connection_error:
+        // ─────────────────────────────────────────────────────────────
+        // Failure: Cannot connect to database
+        // ─────────────────────────────────────────────────────────────
+        RETURN HTTP 503 (Service Unavailable):
+            status: "error"
+            timestamp: current_datetime_ISO8601
+            service: "backend"
+            database: "disconnected"
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT health_route_module
+
+/**
+ * Health Check Usage in Docker Compose:
+ *
+ * healthcheck:
+ *   test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+ *   interval: 10s
+ *   timeout: 5s
+ *   retries: 3
+ *
+ * This ensures dependent services only start after backend is healthy.
+ */

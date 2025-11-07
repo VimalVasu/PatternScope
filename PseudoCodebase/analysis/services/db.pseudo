@@ -1,0 +1,301 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: analysis/services/db.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Database access layer for the analysis service.
+ *   Provides methods to fetch traffic events for analysis and store
+ *   detected anomalies and trend suggestions back to the database.
+ *
+ * SYSTEM FIT:
+ *   - Encapsulates all database operations for analysis service
+ *   - Converts between SQL results and pandas DataFrames for ML processing
+ *   - Handles connection management (create connection per operation)
+ *   - Interfaces with PostgreSQL database tables:
+ *     - traffic_events (read)
+ *     - anomalies (write)
+ *     - trend_suggestions (write)
+ *
+ * KEY DEPENDENCIES:
+ *   → psycopg2 - PostgreSQL driver
+ *   → pandas - DataFrame conversion for ML processing
+ *   → PostgreSQL database - Data source and storage
+ *
+ * CALLED BY:
+ *   - services/analysis.py - To fetch traffic data and store anomalies
+ *   - services/llm_client.py - To store trend suggestions
+ *
+ * CALLS:
+ *   - PostgreSQL database via psycopg2 driver
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT psycopg2 (PostgreSQL driver)
+IMPORT pandas
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: Database
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS Database:
+    """
+    Database access layer for analysis service.
+    Manages PostgreSQL connections and provides CRUD operations.
+    """
+
+    CONSTRUCTOR():
+        """
+        Initializes connection parameters from environment variables.
+        Does not create connection yet - connections are created per operation.
+        """
+        INITIALIZE self.connection_params = {
+            host: ENV_VAR("DB_HOST", default: "db"),
+            port: ENV_VAR("DB_PORT", default: 5432),
+            database: ENV_VAR("DB_NAME", default: "patternscope"),
+            user: ENV_VAR("DB_USER", default: "postgres"),
+            password: ENV_VAR("DB_PASSWORD", default: "postgres")
+        }
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: Get Database Connection
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD get_connection():
+        """
+        Creates and returns a new database connection.
+        Connections should be closed after use (in finally block).
+        """
+        RETURN CREATE_CONNECTION(self.connection_params)
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // READ: Fetch Traffic Events
+    // Returns pandas DataFrame for ML processing
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD fetch_traffic_events(start, end):
+        """
+        Fetches traffic events from database and returns as pandas DataFrame.
+        Used by AnalysisService for anomaly detection.
+
+        Arguments:
+            start: ISO8601 datetime string (optional) - Filter events after this time
+            end: ISO8601 datetime string (optional) - Filter events before this time
+
+        Returns:
+            pandas DataFrame with columns:
+                - id, timestamp, location_id, vehicle_count
+                - avg_speed, min_speed, max_speed
+                - traffic_density_score
+
+        Called by: AnalysisService.run_analysis()
+        """
+
+        connection = self.get_connection()
+
+        TRY:
+            // ─────────────────────────────────────────────────────────
+            // Build dynamic query with optional time filters
+            // ─────────────────────────────────────────────────────────
+            query = """
+                SELECT
+                    id,
+                    timestamp,
+                    location_id,
+                    vehicle_count,
+                    avg_speed,
+                    min_speed,
+                    max_speed,
+                    traffic_density_score
+                FROM traffic_events
+            """
+
+            conditions = []
+            parameters = []
+
+            IF start IS provided:
+                ADD "timestamp >= %s" TO conditions
+                ADD start TO parameters
+
+            IF end IS provided:
+                ADD "timestamp <= %s" TO conditions
+                ADD end TO parameters
+
+            IF conditions IS NOT empty:
+                query = query + " WHERE " + JOIN(conditions, " AND ")
+
+            query = query + " ORDER BY timestamp"
+
+            // ─────────────────────────────────────────────────────────
+            // Execute query and convert to DataFrame
+            // pandas.read_sql_query handles the conversion automatically
+            // ─────────────────────────────────────────────────────────
+            dataframe = pandas.read_sql_query(
+                sql: query,
+                connection: connection,
+                params: parameters IF parameters ELSE null
+            )
+
+            RETURN dataframe
+
+        FINALLY:
+            CLOSE connection
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WRITE: Insert Detected Anomalies
+    // Stores array of anomaly objects in database
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD insert_anomalies(anomalies):
+        """
+        Inserts detected anomalies into the database.
+
+        Arguments:
+            anomalies: Array of anomaly objects, each containing:
+                - traffic_event_id: int
+                - anomaly_type: string ('zscore', 'iqr', 'isolation_forest', 'lof')
+                - confidence_score: float (0-1)
+                - affected_metrics: array of strings
+                - description: string
+
+        Returns:
+            Integer count of inserted anomalies
+
+        Called by: AnalysisService.run_analysis()
+        """
+
+        IF anomalies IS empty:
+            RETURN 0
+
+        connection = self.get_connection()
+
+        TRY:
+            cursor = connection.cursor()
+
+            // Prepare INSERT query
+            query = """
+                INSERT INTO anomalies (
+                    traffic_event_id,
+                    anomaly_type,
+                    confidence_score,
+                    affected_metrics,
+                    description
+                ) VALUES (%s, %s, %s, %s, %s)
+            """
+
+            // Insert each anomaly
+            FOR EACH anomaly IN anomalies:
+                EXECUTE cursor.execute(
+                    query,
+                    [
+                        anomaly.traffic_event_id,
+                        anomaly.anomaly_type,
+                        anomaly.confidence_score,
+                        JSON_encode(anomaly.affected_metrics),  // Convert array to JSONB
+                        anomaly.description
+                    ]
+                )
+
+            // Commit all inserts
+            COMMIT connection
+
+            RETURN LENGTH(anomalies)
+
+        FINALLY:
+            CLOSE connection
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WRITE: Insert Trend Suggestion
+    // Stores LLM-generated suggestion in database
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD insert_trend_suggestion(suggestion):
+        """
+        Inserts a trend suggestion into the database.
+
+        Arguments:
+            suggestion: Object containing:
+                - time_period_start: ISO8601 datetime string
+                - time_period_end: ISO8601 datetime string
+                - suggestion_type: string (e.g., 'anomaly_summary')
+                - confidence_level: float (0-1)
+                - description: string (LLM-generated text)
+                - related_anomalies: array of traffic_event_ids
+
+        Returns:
+            Integer ID of inserted suggestion
+
+        Called by: OllamaClient.generate_trend_suggestions()
+        """
+
+        connection = self.get_connection()
+
+        TRY:
+            cursor = connection.cursor()
+
+            // Prepare INSERT query
+            query = """
+                INSERT INTO trend_suggestions (
+                    time_period_start,
+                    time_period_end,
+                    suggestion_type,
+                    confidence_level,
+                    description,
+                    related_anomalies
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """
+
+            // Execute insert
+            EXECUTE cursor.execute(
+                query,
+                [
+                    suggestion.time_period_start,
+                    suggestion.time_period_end,
+                    suggestion.suggestion_type,
+                    suggestion.confidence_level,
+                    suggestion.description,
+                    suggestion.get('related_anomalies', [])  // PostgreSQL INTEGER[] array
+                ]
+            )
+
+            // Get inserted ID
+            result = cursor.fetchone()
+            inserted_id = result[0] IF result ELSE 0
+
+            // Commit transaction
+            COMMIT connection
+
+            RETURN inserted_id
+
+        FINALLY:
+            CLOSE connection
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT Database
+
+/**
+ * Usage Pattern:
+ *
+ * db = Database()
+ *
+ * # Fetch data for analysis
+ * df = db.fetch_traffic_events(start="2025-11-07T00:00:00", end="2025-11-07T23:59:59")
+ *
+ * # Store anomalies
+ * anomalies = [...]
+ * count = db.insert_anomalies(anomalies)
+ *
+ * # Store suggestion
+ * suggestion = {...}
+ * id = db.insert_trend_suggestion(suggestion)
+ */

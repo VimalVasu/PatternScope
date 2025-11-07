@@ -1,0 +1,68 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/main.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Entry point for the React dashboard application.
+ *   Initializes React and mounts the root App component to the DOM.
+ *
+ * SYSTEM FIT:
+ *   - First file executed when dashboard loads in browser
+ *   - Sets up React rendering with StrictMode for development warnings
+ *   - Mounts the entire application to the 'root' DOM element
+ *   - Simple bootstrap file - all actual logic is in App.jsx
+ *
+ * KEY DEPENDENCIES:
+ *   → React library - UI framework
+ *   → App.jsx - Main application component
+ *   → index.css - Global styles
+ *   → public/index.html - HTML template with 'root' element
+ *
+ * CALLED BY:
+ *   - Browser when page loads
+ *   - Vite dev server during development
+ *
+ * CALLS:
+ *   - App component (React component tree)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT React library
+IMPORT ReactDOM rendering library
+IMPORT App component FROM ./App.pseudo
+IMPORT global styles FROM ./index.css
+
+
+// ═══════════════════════════════════════════════════════════════════
+// REACT APPLICATION INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * High-level flow:
+ * 1. Find the 'root' DOM element in index.html
+ * 2. Create a React root
+ * 3. Render the App component wrapped in StrictMode
+ * 4. StrictMode enables additional development checks
+ */
+
+// Get the 'root' DOM element
+root_element = DOCUMENT.getElementById("root")
+
+// Create React root
+react_root = ReactDOM.createRoot(root_element)
+
+// Render application
+react_root.render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+)
+
+/**
+ * React.StrictMode:
+ * - Activates additional checks in development
+ * - Warns about deprecated APIs
+ * - Detects side effects in render
+ * - Does not affect production builds
+ */

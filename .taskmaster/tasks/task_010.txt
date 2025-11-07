@@ -1,0 +1,37 @@
+# Task ID: 10
+# Title: Testing Infrastructure - E2E Tests
+# Status: pending
+# Dependencies: 7, 9
+# Priority: medium
+# Description: Implement Playwright E2E tests for complete workflows
+# Details:
+Test complete flows: backend+db+edge-mock data ingestion, analysis pipeline (ingest → run analysis → verify suggestions), dashboard UI (seed data, select date range, verify KPIs and suggestions rendered). Use Playwright with proper waits (wait for specific text, not arbitrary timeouts).
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Set up Playwright E2E Testing Environment [pending]
+### Dependencies: None
+### Description: Configure Playwright testing framework with necessary dependencies and environment setup for E2E testing across all services
+### Details:
+Install Playwright and configure it to work with the project's architecture. Set up test fixtures, environment variables, and Docker configuration to ensure tests can access all services (backend, database, edge-mock, analysis pipeline, dashboard UI). Create helper functions for common operations like authentication and test data management.
+
+## 2. Implement Data Ingestion Workflow E2E Tests [pending]
+### Dependencies: 10.1
+### Description: Create E2E tests that verify the complete data ingestion flow from edge-mock to backend database storage
+### Details:
+Write Playwright tests that verify: 1) Edge-mock successfully generates and sends traffic events to backend, 2) Backend properly validates and stores events in the database, 3) GET /metrics/traffic endpoint returns correct aggregated data. Include test cases for valid and invalid data scenarios, and verify proper error handling.
+
+## 3. Implement Analysis Pipeline Workflow E2E Tests [pending]
+### Dependencies: 10.2
+### Description: Create E2E tests for the complete analysis pipeline workflow from data ingestion through analysis execution to suggestion generation
+### Details:
+Develop Playwright tests that: 1) Seed the database with known traffic events, 2) Trigger analysis pipeline execution, 3) Verify anomalies are detected correctly, 4) Confirm trend suggestions are generated and stored. Tests should validate the entire ingest → run analysis → verify suggestions flow with appropriate assertions at each step.
+
+## 4. Implement Dashboard UI Interaction E2E Tests [pending]
+### Dependencies: 10.3
+### Description: Create E2E tests for dashboard UI interactions including data visualization, date range selection, and KPI rendering
+### Details:
+Write Playwright tests that: 1) Seed the database with test data, 2) Navigate to the dashboard UI, 3) Test date range selection functionality, 4) Verify KPIs are correctly calculated and displayed, 5) Confirm suggestions are properly rendered. Implement proper waiting strategies using Playwright's waitForSelector and expect methods instead of arbitrary timeouts.
+

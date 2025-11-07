@@ -1,0 +1,37 @@
+# Task ID: 7
+# Title: Phase 3 - Dashboard UI Implementation
+# Status: pending
+# Dependencies: 2, 5, 6
+# Priority: medium
+# Description: Build React dashboard for visualizing metrics and suggestions
+# Details:
+Create minimal UI with: date range controls (start/end datetime + refresh button), KPIs (total vehicles, avg speed, # anomalies), vehicle_count time series chart, trend suggestions list. Implement thin api.ts client. Use React + Vite. No auth, no extra filters.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. React Project Setup with Vite [pending]
+### Dependencies: None
+### Description: Initialize and configure the React project with Vite for the dashboard UI implementation
+### Details:
+Create a new React project using Vite. Install necessary dependencies including React Router, Axios for API calls, and a charting library (like Chart.js or Recharts). Set up the basic folder structure with components, services, and utils directories. Configure ESLint and Prettier for code quality.
+
+## 2. Date Range Controls Implementation [pending]
+### Dependencies: 7.1
+### Description: Create interactive date range selection components with start/end datetime pickers and refresh button
+### Details:
+Implement a DateRangeSelector component with start and end datetime pickers. Add validation to ensure end date is after start date. Create a refresh button that triggers data reload. Implement state management for the selected date range that can be accessed by other components. Style the controls according to the dashboard design.
+
+## 3. KPI and Metrics Display Components [pending]
+### Dependencies: 7.1, 7.2
+### Description: Develop components to display key performance indicators and metrics including total vehicles, average speed, and anomaly count
+### Details:
+Create reusable KPI card components to display metrics with appropriate formatting. Implement the dashboard layout with a grid of KPI cards. Connect the KPI components to the API client to fetch and display real-time data based on the selected date range. Add loading states and error handling for data fetching. Implement auto-refresh functionality based on user settings.
+
+## 4. Time Series Chart and API Client Implementation [pending]
+### Dependencies: 7.1, 7.2, 7.3
+### Description: Implement the vehicle count time series visualization and create the API client for data fetching
+### Details:
+Create an api.ts module with functions to fetch data from backend endpoints. Implement the TimeSeriesChart component using a charting library to visualize vehicle count over time. Add zoom and pan capabilities to the chart. Connect the chart to the API client to fetch time series data based on the selected date range. Implement the trend suggestions list component to display insights from the backend. Add proper error handling and loading states.
+

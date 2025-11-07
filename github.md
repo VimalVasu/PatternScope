@@ -72,7 +72,7 @@ git commit -m "Initial commit: PatternScope project setup"
 
 ```bash
 # Add GitHub remote (replace YOUR_USERNAME with your GitHub username)
-git remote add origin https://github.com/YOUR_USERNAME/PatternScope.git
+git remote add origin https://github.com/VimalVasu/PatternScope.git
 
 # Verify remote was added
 git remote -v

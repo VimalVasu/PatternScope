@@ -1,0 +1,31 @@
+# Task ID: 8
+# Title: Phase 3 - Dashboard Backend Endpoints
+# Status: pending
+# Dependencies: 2, 5, 6
+# Priority: medium
+# Description: Add dashboard-specific API endpoints to backend
+# Details:
+Implement GET /dashboard/summary?start&end, GET /dashboard/timeseries?start&end, GET /trends/suggestions?start&end. Return aggregated data from traffic_events, anomalies, and trend_suggestions tables.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement GET /dashboard/summary Endpoint [pending]
+### Dependencies: None
+### Description: Create the summary endpoint that aggregates data from traffic_events and anomalies tables for the dashboard overview.
+### Details:
+Implement the GET /dashboard/summary?start&end endpoint that returns aggregated metrics including total vehicle count, average speed, number of anomalies, and other KPIs. Query the traffic_events and anomalies tables with date range filtering. Include proper error handling for invalid date parameters and database connection issues. Format response as JSON with consistent structure.
+
+## 2. Implement GET /dashboard/timeseries Endpoint [pending]
+### Dependencies: 8.1
+### Description: Create the time series endpoint that provides temporal data for charts and visualizations on the dashboard.
+### Details:
+Implement the GET /dashboard/timeseries?start&end endpoint that returns time-based data series for vehicle counts, speeds, and anomalies. Group data by appropriate time intervals (hourly/daily) based on the date range. Query the traffic_events table with proper indexing for performance. Format response with timestamps and corresponding metric values in a structure suitable for frontend charting libraries.
+
+## 3. Implement GET /trends/suggestions Endpoint [pending]
+### Dependencies: 8.1, 8.2
+### Description: Create the trend suggestions endpoint that retrieves AI-generated insights from the trend_suggestions table.
+### Details:
+Implement the GET /trends/suggestions?start&end endpoint that returns trend insights and suggestions based on traffic patterns. Query the trend_suggestions table filtered by date range. Include relevance scoring and sorting in the response. Ensure proper pagination if the number of suggestions is large. Format response with suggestion text, confidence score, and related metrics for frontend display.
+

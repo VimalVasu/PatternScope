@@ -1,0 +1,667 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Phase 0 - Skeleton & Environment Setup",
+        "description": "Create minimal but correct multi-service skeleton with docker-compose setup",
+        "details": "Deliverables: docker-compose.yml with services (db, backend, dashboard, analysis, edge-mock, ollama), Dockerfiles for each service, health-check endpoints for all services, .env.example files",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Dockerfiles for each service",
+            "description": "Develop Dockerfiles for all six services: db, backend, dashboard, analysis, edge-mock, and ollama",
+            "dependencies": [],
+            "details": "Create individual Dockerfiles for each service with appropriate base images, dependencies, and configurations. For db, use PostgreSQL image; for backend, use Node.js; for dashboard, use Node.js with React; for analysis, use Python with data science libraries; for edge-mock, use a lightweight Node.js or Python image; for ollama, use the official ollama image with necessary configurations.",
+            "status": "pending",
+            "testStrategy": "Verify each Dockerfile builds successfully with docker build command and produces a functional container"
+          },
+          {
+            "id": 2,
+            "title": "Configure docker-compose.yml",
+            "description": "Create a docker-compose.yml file that properly connects all services with appropriate networking, volumes, and dependencies",
+            "dependencies": [
+              1
+            ],
+            "details": "Define all six services in docker-compose.yml with proper configuration including: network settings, volume mounts for persistent data, environment variable references, port mappings, health checks, restart policies, and service dependencies. Ensure services can communicate with each other using service names as hostnames.",
+            "status": "pending",
+            "testStrategy": "Test with docker-compose up to verify all services start without errors and can communicate with each other"
+          },
+          {
+            "id": 3,
+            "title": "Implement health check endpoints",
+            "description": "Create health check endpoints for all services to enable monitoring and dependency validation",
+            "dependencies": [
+              1
+            ],
+            "details": "For each service, implement a /health or /healthz endpoint that returns HTTP 200 OK when the service is functioning properly. For the backend, dashboard, analysis, and edge-mock services, implement custom health checks that verify connectivity to dependent services. For db, configure PostgreSQL health checks. For ollama, implement or configure appropriate health verification.",
+            "status": "pending",
+            "testStrategy": "Test each health endpoint with curl or similar tool to verify proper responses. Verify docker-compose health checks properly detect service status."
+          },
+          {
+            "id": 4,
+            "title": "Set up environment variable configuration",
+            "description": "Create .env.example files for all services with required configuration variables",
+            "dependencies": [],
+            "details": "Create .env.example files for each service containing all necessary environment variables with example values. Include database connection strings, API endpoints, service URLs, ports, credentials (with dummy values), logging levels, and any service-specific configuration options. Document each variable with comments explaining its purpose and acceptable values.",
+            "status": "pending",
+            "testStrategy": "Verify all services can start properly when .env files are created from the examples. Test with different configuration values to ensure proper handling."
+          },
+          {
+            "id": 5,
+            "title": "Initialize database schema",
+            "description": "Create initialization scripts for the database service to set up required tables and schemas",
+            "dependencies": [
+              2
+            ],
+            "details": "Develop SQL initialization scripts that will run when the database container starts. Create tables for traffic_events, anomalies, and any other required data structures. Include appropriate indexes, constraints, and relationships. Mount these scripts in the db service configuration to ensure they run on first startup.",
+            "status": "pending",
+            "testStrategy": "Verify database initializes correctly with tables created. Test with sample data insertion to ensure schema is correct."
+          },
+          {
+            "id": 6,
+            "title": "Create minimal service skeletons",
+            "description": "Implement minimal but functional code for each service to verify the overall architecture",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "For each service, create minimal implementation code that starts the service, responds to health checks, and provides basic functionality: backend with basic API endpoints, dashboard with minimal UI, analysis service with endpoint structure, edge-mock with basic configuration, and verify ollama is properly configured. Ensure each service logs startup information and can handle basic error conditions.",
+            "status": "pending",
+            "testStrategy": "Test the entire system with docker-compose up and verify all services start and can communicate. Test basic functionality of each service."
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Phase 1 - Backend Ingestion API",
+        "description": "Implement POST /ingest/traffic endpoint to accept and persist traffic events",
+        "details": "Create validation for JSON body, implement traffic_events table writes, add GET /metrics/traffic endpoint with start/end query params returning vehicle count, avg speed, and timeseries data. Use TypeScript + Fastify.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          1
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement JSON Schema Validation for Traffic Events",
+            "description": "Create validation schema for the traffic events JSON payload that will be received by the POST /ingest/traffic endpoint.",
+            "dependencies": [],
+            "details": "Define TypeScript interfaces for traffic event data structure. Implement JSON schema validation using Fastify's built-in validation capabilities. Schema should validate required fields: timestamp, location_id, vehicle_count, avg_speed, and optional fields like min_speed, max_speed, color_counts, inter_arrival_stats, traffic_density_score, and raw_features. Include proper error handling for validation failures.",
+            "status": "pending",
+            "testStrategy": "Unit tests for schema validation with valid and invalid payloads. Test edge cases like missing required fields, invalid data types, and boundary values."
+          },
+          {
+            "id": 2,
+            "title": "Create Traffic Events Repository Layer",
+            "description": "Implement the database repository layer for persisting and retrieving traffic events from the traffic_events table.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a TrafficEventsRepository class with methods for inserting new traffic events and querying events with time-based filters. Implement database connection handling, SQL query construction, and error handling. Use prepared statements for security. Ensure proper transaction handling for batch inserts. The repository should be designed with a clean interface that abstracts database operations from the API layer.",
+            "status": "pending",
+            "testStrategy": "Unit tests with database mocks to verify query construction. Integration tests with a test database to verify actual data persistence and retrieval."
+          },
+          {
+            "id": 3,
+            "title": "Implement POST /ingest/traffic Endpoint",
+            "description": "Create the REST API endpoint for ingesting traffic event data with proper request validation and response handling.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement a Fastify route handler for POST /ingest/traffic that validates incoming requests using the JSON schema, processes the validated data, and persists it to the database using the repository layer. Include appropriate HTTP status codes for success (201) and error scenarios (400, 500). Implement request logging and performance metrics collection. Handle both single event and batch event ingestion patterns.",
+            "status": "pending",
+            "testStrategy": "Integration tests to verify the complete request flow from HTTP request to database persistence. Test various payload sizes and error conditions."
+          },
+          {
+            "id": 4,
+            "title": "Implement GET /metrics/traffic Endpoint with Aggregation Logic",
+            "description": "Create the metrics endpoint that aggregates traffic data based on time range parameters and returns statistical summaries.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement a Fastify route handler for GET /metrics/traffic that accepts start and end query parameters for time filtering. Create aggregation functions to calculate vehicle count totals, average speeds, and generate timeseries data with appropriate time buckets (hourly, daily). Implement efficient database queries that leverage indexes for time-based filtering. Format response data according to API specifications with proper metadata about the aggregation period.",
+            "status": "pending",
+            "testStrategy": "Unit tests for aggregation logic with mock data. Integration tests with test database to verify correct calculations across different time ranges and data distributions."
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Phase 1 - Database Schema & Migrations",
+        "description": "Create and apply database migrations for all required tables",
+        "details": "Implement 001_init.sql with traffic_events table (id, timestamp, location_id, vehicle_count, avg_speed, min_speed, max_speed, color_counts, inter_arrival_stats, traffic_density_score, raw_features). Add migrations for anomalies and trend_suggestions tables.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          1
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create traffic_events table migration",
+            "description": "Implement the SQL migration for the traffic_events table with all required columns and appropriate data types.",
+            "dependencies": [],
+            "details": "Create 001_init.sql migration file with CREATE TABLE statement for traffic_events including columns: id (primary key), timestamp (timestamptz), location_id (integer with foreign key constraint), vehicle_count (integer), avg_speed (float), min_speed (float), max_speed (float), color_counts (jsonb for storing color distribution), inter_arrival_stats (jsonb for arrival time statistics), traffic_density_score (float), and raw_features (jsonb for additional data). Add appropriate indexes on timestamp and location_id columns for query performance.",
+            "status": "pending",
+            "testStrategy": "Verify migration applies successfully, check column data types and constraints, test inserting sample data to ensure schema correctness."
+          },
+          {
+            "id": 2,
+            "title": "Create anomalies table migration",
+            "description": "Design and implement the SQL migration for the anomalies table to store detected traffic anomalies.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create 002_anomalies.sql migration file with CREATE TABLE statement for anomalies including columns: id (primary key), detected_at (timestamptz), traffic_event_id (foreign key to traffic_events), anomaly_type (enum or varchar), confidence_score (float), affected_metrics (jsonb array of affected metrics), description (text), and is_resolved (boolean). Add indexes on detected_at and traffic_event_id columns. Include foreign key constraint referencing traffic_events table.",
+            "status": "pending",
+            "testStrategy": "Test migration rollback and reapply, verify foreign key constraints work correctly, ensure indexes are created properly."
+          },
+          {
+            "id": 3,
+            "title": "Create trend_suggestions table migration",
+            "description": "Design and implement the SQL migration for the trend_suggestions table to store AI-generated insights about traffic patterns.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create 003_trend_suggestions.sql migration file with CREATE TABLE statement for trend_suggestions including columns: id (primary key), created_at (timestamptz), time_period_start (timestamptz), time_period_end (timestamptz), suggestion_type (enum or varchar), confidence_level (float), description (text), related_anomalies (array of foreign keys to anomalies table), and action_taken (boolean with default false). Add appropriate indexes on time_period columns and suggestion_type for efficient querying.",
+            "status": "pending",
+            "testStrategy": "Verify migration applies correctly, test with sample data insertion, ensure indexes work for common query patterns, test foreign key relationships."
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Phase 1 - Edge Mock Publisher",
+        "description": "Create mock data generator that publishes traffic events to backend",
+        "details": "Build edge-mock container that sends valid random JSON every N seconds to http://backend:PORT/ingest/traffic. Generate realistic vehicle_count, speeds, color_counts, and other required fields matching the traffic_events schema.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          3
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Random Traffic Data Generator with Realistic Patterns",
+            "description": "Create a module that generates realistic mock traffic event data matching the required schema with appropriate distributions for vehicle counts, speeds, and color distributions.",
+            "dependencies": [],
+            "details": "Develop a data generation module that produces JSON objects with fields matching the traffic_events schema including vehicle_count, avg_speed, min_speed, max_speed, color_counts, inter_arrival_stats, and traffic_density_score. Implement time-of-day variations to simulate rush hours and weekend patterns. Use statistical distributions (normal, poisson) for realistic vehicle counts and speeds. Generate color distributions based on real-world vehicle color popularity statistics.",
+            "status": "pending",
+            "testStrategy": "Unit test the generator with assertions for field presence, value ranges, and statistical properties. Verify generated data matches expected patterns and constraints."
+          },
+          {
+            "id": 2,
+            "title": "Build HTTP Publisher with Configurable Intervals",
+            "description": "Implement a service that publishes the generated mock traffic data to the backend API at configurable time intervals with proper error handling.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create a publisher service that sends HTTP POST requests to http://backend:PORT/ingest/traffic endpoint. Implement configurable publishing frequency (N seconds) via environment variables. Add proper error handling for connection failures and API rejections. Include retry logic with exponential backoff. Package the generator and publisher into a containerized service with appropriate logging. Ensure the container can be configured via environment variables for backend URL, port, and publishing interval.",
+            "status": "pending",
+            "testStrategy": "Test HTTP publishing with mocked backend responses. Verify correct handling of various HTTP status codes and network errors. Test configuration options and retry mechanisms."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Phase 2 - Analysis Service Core",
+        "description": "Implement Python-based anomaly detection service",
+        "details": "Create analysis service with /run-analysis endpoint. Pull traffic_events for given period, compute rolling stats, detect anomalies using z-score, IQR, or Isolation Forest/KNN on numeric features. Write results to anomalies table. Use pandas, numpy, scikit-learn only - no LLM for detection.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          3
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement database connectivity and data retrieval",
+            "description": "Create functions to connect to the database and retrieve traffic_events data for a specified time period",
+            "dependencies": [],
+            "details": "Implement database connection module with proper error handling. Create functions to query traffic_events table with date range filtering. Include pagination for large datasets and implement efficient data loading using pandas DataFrame. Add logging for query performance metrics.",
+            "status": "pending",
+            "testStrategy": "Unit tests with mock database responses and integration tests with test database instance"
+          },
+          {
+            "id": 2,
+            "title": "Implement statistical analysis module",
+            "description": "Create module for computing rolling statistics on traffic data using pandas and numpy",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement functions to calculate rolling means, standard deviations, medians, and quartiles on numeric features. Create time-based grouping functions for different aggregation levels (hourly, daily, weekly). Optimize for performance with large datasets using vectorized operations. Include visualization helpers for debugging.",
+            "status": "pending",
+            "testStrategy": "Unit tests with synthetic datasets covering various edge cases and statistical distributions"
+          },
+          {
+            "id": 3,
+            "title": "Implement anomaly detection algorithms",
+            "description": "Create module with multiple anomaly detection techniques including z-score, IQR, Isolation Forest and KNN",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement z-score detection with configurable thresholds. Create IQR-based outlier detection. Integrate scikit-learn's Isolation Forest and KNN algorithms with proper parameter tuning. Add algorithm selection logic based on data characteristics. Include anomaly scoring and confidence metrics for each detection method.",
+            "status": "pending",
+            "testStrategy": "Unit tests with known anomalies in synthetic data and benchmark tests comparing algorithm performance"
+          },
+          {
+            "id": 4,
+            "title": "Implement anomaly result storage",
+            "description": "Create functions to store detected anomalies in the database with proper metadata",
+            "dependencies": [
+              3
+            ],
+            "details": "Implement functions to format anomaly results with timestamps, detection method, confidence scores, and affected metrics. Create database insertion functions with proper error handling and transaction support. Add deduplication logic to prevent duplicate anomaly records. Include functions to retrieve existing anomalies for comparison.",
+            "status": "pending",
+            "testStrategy": "Integration tests with test database to verify correct storage and retrieval of anomaly data"
+          },
+          {
+            "id": 5,
+            "title": "Implement /run-analysis API endpoint",
+            "description": "Create FastAPI endpoint that orchestrates the entire analysis pipeline from data retrieval to anomaly storage",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Implement FastAPI endpoint with proper request validation for date ranges and analysis parameters. Create orchestration logic to sequence data retrieval, statistical analysis, anomaly detection, and result storage. Add comprehensive error handling and status reporting. Implement asynchronous processing for long-running analyses with status tracking. Include detailed logging throughout the pipeline.",
+            "status": "pending",
+            "testStrategy": "API tests with various request parameters and integration tests covering the full analysis pipeline"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Phase 2 - LLM Trend Summarization",
+        "description": "Integrate Ollama for human-readable trend suggestions",
+        "details": "Implement LLM client (URL + model from env) with timeout and error handling. Summarize detected anomalies and recurring patterns. Output bullet-style suggestions to trend_suggestions table. Add interface for test stubbing. Do NOT use LLM for anomaly classification - only for narrative summaries.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          5
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Ollama LLM Client with Error Handling",
+            "description": "Create a client module to interact with Ollama LLM service, configurable via environment variables with proper timeout and error handling.",
+            "dependencies": [],
+            "details": "Develop a client class that connects to Ollama using URL and model name from environment variables. Implement timeout mechanism (default 10s), retry logic (max 3 attempts), and comprehensive error handling for network issues, malformed responses, and service unavailability. Include logging for all operations and errors. The client should expose a simple async interface for sending prompts and receiving responses.",
+            "status": "pending",
+            "testStrategy": "Unit tests with mocked HTTP responses for success, timeout, and error scenarios. Integration tests against a minimal Ollama instance in CI."
+          },
+          {
+            "id": 2,
+            "title": "Design Prompt Engineering for Trend Summarization",
+            "description": "Create effective prompts for the LLM to generate human-readable summaries of detected anomalies and recurring patterns.",
+            "dependencies": [
+              1
+            ],
+            "details": "Develop a prompt template system that structures anomaly data for the LLM. Include context about traffic patterns, specific instructions for bullet-style formatting, and examples of good summaries. Implement prompt versioning to track effectiveness. Create a module that transforms structured anomaly data into appropriate prompts, ensuring that prompts remain within token limits and contain sufficient context for meaningful summaries without using LLM for anomaly classification itself.",
+            "status": "pending",
+            "testStrategy": "Evaluate prompt effectiveness with sample anomaly data against different LLM parameters. Create unit tests for prompt generation logic and token limit handling."
+          },
+          {
+            "id": 3,
+            "title": "Implement Database Integration for Trend Suggestions",
+            "description": "Create data models and repository functions to store and retrieve LLM-generated trend suggestions in the database.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement a TrendSuggestion model with fields for id, timestamp, source_anomalies (array of anomaly IDs), suggestion_text (bullet-formatted text from LLM), and metadata. Create repository functions for inserting new suggestions and querying suggestions by time range or related anomalies. Ensure proper transaction handling when storing suggestions that reference multiple anomalies. Add indexes for efficient querying of trend suggestions.",
+            "status": "pending",
+            "testStrategy": "Unit tests for repository functions with a test database. Integration tests to verify data integrity between anomalies and trend suggestions tables."
+          },
+          {
+            "id": 4,
+            "title": "Create Test Stubbing Interface for LLM Integration",
+            "description": "Develop an interface that allows for easy substitution of the LLM client with test doubles during testing.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Design an abstract interface (LLMClientInterface) that both the real Ollama client and test stubs can implement. Create a factory pattern for client instantiation that can be configured to return test stubs. Implement a configurable test stub that can return predefined responses for given prompts or simulate various error conditions. Add a mechanism to record prompts sent to the LLM for verification in tests. Ensure the interface supports both synchronous and asynchronous testing approaches.",
+            "status": "pending",
+            "testStrategy": "Unit tests verifying that the test stub correctly mimics real client behavior. Integration tests using the stub to verify the entire trend summarization pipeline functions correctly without requiring an actual LLM service."
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Phase 3 - Dashboard UI Implementation",
+        "description": "Build React dashboard for visualizing metrics and suggestions",
+        "details": "Create minimal UI with: date range controls (start/end datetime + refresh button), KPIs (total vehicles, avg speed, # anomalies), vehicle_count time series chart, trend suggestions list. Implement thin api.ts client. Use React + Vite. No auth, no extra filters.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          5,
+          6
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "React Project Setup with Vite",
+            "description": "Initialize and configure the React project with Vite for the dashboard UI implementation",
+            "dependencies": [],
+            "details": "Create a new React project using Vite. Install necessary dependencies including React Router, Axios for API calls, and a charting library (like Chart.js or Recharts). Set up the basic folder structure with components, services, and utils directories. Configure ESLint and Prettier for code quality.",
+            "status": "pending",
+            "testStrategy": "Verify that the project builds successfully and the development server runs without errors. Test basic navigation between placeholder pages."
+          },
+          {
+            "id": 2,
+            "title": "Date Range Controls Implementation",
+            "description": "Create interactive date range selection components with start/end datetime pickers and refresh button",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement a DateRangeSelector component with start and end datetime pickers. Add validation to ensure end date is after start date. Create a refresh button that triggers data reload. Implement state management for the selected date range that can be accessed by other components. Style the controls according to the dashboard design.",
+            "status": "pending",
+            "testStrategy": "Test date selection functionality, validation logic, and verify that the refresh button correctly triggers the data refresh action. Test edge cases like invalid date selections."
+          },
+          {
+            "id": 3,
+            "title": "KPI and Metrics Display Components",
+            "description": "Develop components to display key performance indicators and metrics including total vehicles, average speed, and anomaly count",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Create reusable KPI card components to display metrics with appropriate formatting. Implement the dashboard layout with a grid of KPI cards. Connect the KPI components to the API client to fetch and display real-time data based on the selected date range. Add loading states and error handling for data fetching. Implement auto-refresh functionality based on user settings.",
+            "status": "pending",
+            "testStrategy": "Verify that KPI components correctly display formatted data. Test loading states and error handling. Ensure that KPI values update correctly when the date range changes or refresh is triggered."
+          },
+          {
+            "id": 4,
+            "title": "Time Series Chart and API Client Implementation",
+            "description": "Implement the vehicle count time series visualization and create the API client for data fetching",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Create an api.ts module with functions to fetch data from backend endpoints. Implement the TimeSeriesChart component using a charting library to visualize vehicle count over time. Add zoom and pan capabilities to the chart. Connect the chart to the API client to fetch time series data based on the selected date range. Implement the trend suggestions list component to display insights from the backend. Add proper error handling and loading states.",
+            "status": "pending",
+            "testStrategy": "Test API client functions with mock responses. Verify that the time series chart correctly renders data and responds to date range changes. Test zoom and pan functionality. Ensure trend suggestions are properly displayed and updated."
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Phase 3 - Dashboard Backend Endpoints",
+        "description": "Add dashboard-specific API endpoints to backend",
+        "details": "Implement GET /dashboard/summary?start&end, GET /dashboard/timeseries?start&end, GET /trends/suggestions?start&end. Return aggregated data from traffic_events, anomalies, and trend_suggestions tables.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          5,
+          6
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement GET /dashboard/summary Endpoint",
+            "description": "Create the summary endpoint that aggregates data from traffic_events and anomalies tables for the dashboard overview.",
+            "dependencies": [],
+            "details": "Implement the GET /dashboard/summary?start&end endpoint that returns aggregated metrics including total vehicle count, average speed, number of anomalies, and other KPIs. Query the traffic_events and anomalies tables with date range filtering. Include proper error handling for invalid date parameters and database connection issues. Format response as JSON with consistent structure.",
+            "status": "pending",
+            "testStrategy": "Write unit tests for date parameter validation and integration tests with test database to verify correct aggregation logic and response format."
+          },
+          {
+            "id": 2,
+            "title": "Implement GET /dashboard/timeseries Endpoint",
+            "description": "Create the time series endpoint that provides temporal data for charts and visualizations on the dashboard.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement the GET /dashboard/timeseries?start&end endpoint that returns time-based data series for vehicle counts, speeds, and anomalies. Group data by appropriate time intervals (hourly/daily) based on the date range. Query the traffic_events table with proper indexing for performance. Format response with timestamps and corresponding metric values in a structure suitable for frontend charting libraries.",
+            "status": "pending",
+            "testStrategy": "Test with various date ranges to ensure proper time bucketing. Verify performance with larger datasets. Create integration tests to validate response format matches frontend requirements."
+          },
+          {
+            "id": 3,
+            "title": "Implement GET /trends/suggestions Endpoint",
+            "description": "Create the trend suggestions endpoint that retrieves AI-generated insights from the trend_suggestions table.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Implement the GET /trends/suggestions?start&end endpoint that returns trend insights and suggestions based on traffic patterns. Query the trend_suggestions table filtered by date range. Include relevance scoring and sorting in the response. Ensure proper pagination if the number of suggestions is large. Format response with suggestion text, confidence score, and related metrics for frontend display.",
+            "status": "pending",
+            "testStrategy": "Test with mock trend suggestion data. Verify filtering logic works correctly with date parameters. Create integration tests to ensure proper joining with traffic event data when needed."
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Testing Infrastructure - Unit & Integration Tests",
+        "description": "Set up comprehensive testing for backend and analysis services",
+        "details": "Backend: schema validation tests, repository/DB write tests, integration tests for /ingest/traffic and /metrics endpoints. Analysis: unit tests for anomaly detection with synthetic data, integration tests for /run-analysis. Use test stubs for LLM client.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          5
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Backend Unit Test Setup for Schema Validation and Repository",
+            "description": "Implement unit tests for backend schema validation and repository layer functionality",
+            "dependencies": [],
+            "details": "Create Jest test suite for TypeScript backend with test fixtures for traffic_events schema validation. Implement unit tests for repository layer with mocked database connections. Set up test database configuration and test data factories. Focus on POST /ingest/traffic endpoint validation and traffic_events table write operations.",
+            "status": "pending",
+            "testStrategy": "Use Jest with TypeScript. Create isolated tests with mocked dependencies. Use in-memory SQLite for repository tests."
+          },
+          {
+            "id": 2,
+            "title": "Backend Integration Test Setup for API Endpoints",
+            "description": "Implement integration tests for backend API endpoints with database interactions",
+            "dependencies": [
+              1
+            ],
+            "details": "Set up integration test environment for backend with test database. Create tests for /ingest/traffic and /metrics endpoints that verify complete request-to-database flows. Implement test fixtures to seed and clean database between tests. Verify response formats match API specifications and data is correctly persisted and retrieved.",
+            "status": "pending",
+            "testStrategy": "Use Supertest with Jest for API testing. Set up Docker test container for PostgreSQL. Implement before/after hooks for database setup/teardown."
+          },
+          {
+            "id": 3,
+            "title": "Analysis Service Unit Tests for Anomaly Detection",
+            "description": "Create unit tests for Python analysis service core algorithms using synthetic data",
+            "dependencies": [],
+            "details": "Implement pytest suite for anomaly detection algorithms. Create synthetic data generators for normal and anomalous traffic patterns. Test z-score, IQR, and machine learning detection methods individually. Verify detection thresholds and accuracy metrics. Mock database interactions to focus on algorithm testing.",
+            "status": "pending",
+            "testStrategy": "Use pytest with numpy/pandas test fixtures. Create parameterized tests for different anomaly scenarios. Use pytest-cov for coverage reporting."
+          },
+          {
+            "id": 4,
+            "title": "Analysis Service Integration Tests for API Endpoints",
+            "description": "Implement integration tests for analysis service API endpoints and database interactions",
+            "dependencies": [
+              3
+            ],
+            "details": "Create integration tests for /run-analysis endpoint that verify the complete flow from receiving request to writing results in the anomalies table. Set up test database fixtures with pre-populated traffic_events data. Verify anomaly detection results are correctly identified and persisted. Test different time ranges and traffic patterns.",
+            "status": "pending",
+            "testStrategy": "Use pytest with FastAPI test client. Implement database fixtures with pytest-postgresql. Create test cases for various traffic scenarios."
+          },
+          {
+            "id": 5,
+            "title": "LLM Client Test Stub Implementation",
+            "description": "Create test stubs for LLM client to enable reliable testing of dependent components",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Implement mock LLM client that returns predefined responses for different input patterns. Create test fixtures that can be used across unit and integration tests. Define standard test cases for trend analysis and suggestion generation. Ensure stubs can simulate both successful responses and error conditions from the LLM service.",
+            "status": "pending",
+            "testStrategy": "Create Python mock objects with predefined response templates. Implement factory methods for different test scenarios. Support both synchronous and asynchronous testing patterns."
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Testing Infrastructure - E2E Tests",
+        "description": "Implement Playwright E2E tests for complete workflows",
+        "details": "Test complete flows: backend+db+edge-mock data ingestion, analysis pipeline (ingest → run analysis → verify suggestions), dashboard UI (seed data, select date range, verify KPIs and suggestions rendered). Use Playwright with proper waits (wait for specific text, not arbitrary timeouts).",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          7,
+          9
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up Playwright E2E Testing Environment",
+            "description": "Configure Playwright testing framework with necessary dependencies and environment setup for E2E testing across all services",
+            "dependencies": [],
+            "details": "Install Playwright and configure it to work with the project's architecture. Set up test fixtures, environment variables, and Docker configuration to ensure tests can access all services (backend, database, edge-mock, analysis pipeline, dashboard UI). Create helper functions for common operations like authentication and test data management.",
+            "status": "pending",
+            "testStrategy": "Verify Playwright installation works by running a simple smoke test that confirms connectivity to all services"
+          },
+          {
+            "id": 2,
+            "title": "Implement Data Ingestion Workflow E2E Tests",
+            "description": "Create E2E tests that verify the complete data ingestion flow from edge-mock to backend database storage",
+            "dependencies": [
+              1
+            ],
+            "details": "Write Playwright tests that verify: 1) Edge-mock successfully generates and sends traffic events to backend, 2) Backend properly validates and stores events in the database, 3) GET /metrics/traffic endpoint returns correct aggregated data. Include test cases for valid and invalid data scenarios, and verify proper error handling.",
+            "status": "pending",
+            "testStrategy": "Use database assertions to verify data was correctly persisted. Mock edge publisher to generate predictable test data for verification."
+          },
+          {
+            "id": 3,
+            "title": "Implement Analysis Pipeline Workflow E2E Tests",
+            "description": "Create E2E tests for the complete analysis pipeline workflow from data ingestion through analysis execution to suggestion generation",
+            "dependencies": [
+              2
+            ],
+            "details": "Develop Playwright tests that: 1) Seed the database with known traffic events, 2) Trigger analysis pipeline execution, 3) Verify anomalies are detected correctly, 4) Confirm trend suggestions are generated and stored. Tests should validate the entire ingest → run analysis → verify suggestions flow with appropriate assertions at each step.",
+            "status": "pending",
+            "testStrategy": "Use controlled test data with known anomalies to verify detection accuracy. Test both normal and edge cases (e.g., sparse data, extreme values)."
+          },
+          {
+            "id": 4,
+            "title": "Implement Dashboard UI Interaction E2E Tests",
+            "description": "Create E2E tests for dashboard UI interactions including data visualization, date range selection, and KPI rendering",
+            "dependencies": [
+              3
+            ],
+            "details": "Write Playwright tests that: 1) Seed the database with test data, 2) Navigate to the dashboard UI, 3) Test date range selection functionality, 4) Verify KPIs are correctly calculated and displayed, 5) Confirm suggestions are properly rendered. Implement proper waiting strategies using Playwright's waitForSelector and expect methods instead of arbitrary timeouts.",
+            "status": "pending",
+            "testStrategy": "Use visual comparison testing for charts and screenshots for regression testing. Test responsive behavior across different viewport sizes."
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Phase 4 - Real Camera Integration",
+        "description": "Implement Jetson Nano camera pipeline for real traffic monitoring",
+        "details": "Create capture.py (read camera frames), detector.py (extract vehicle counts, speeds, color distribution using OpenCV), publisher.py (convert to JSON and POST to backend). Make configurable via config.yaml/env (camera index, ROI, frame rate). Handle camera disconnects gracefully. Mark areas requiring Jetson-specific tuning with YOUR_INPUT_REQUIRED comments.",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2,
+          4
+        ],
+        "priority": "low",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Camera Capture Module (capture.py)",
+            "description": "Create a robust camera capture module that interfaces with the Jetson Nano camera hardware to acquire video frames.",
+            "dependencies": [],
+            "details": "Implement capture.py to initialize camera connection using OpenCV/GStreamer, set resolution and frame rate, implement frame buffering, and handle camera disconnects with automatic reconnection attempts. Include YOUR_INPUT_REQUIRED comments for Jetson-specific camera parameters that need tuning.",
+            "status": "pending",
+            "testStrategy": "Test with different camera models, simulate disconnects, verify frame acquisition rates match configuration."
+          },
+          {
+            "id": 2,
+            "title": "Develop Vehicle Detection Algorithm (detector.py)",
+            "description": "Create the core vehicle detection functionality using OpenCV to identify and count vehicles from camera frames.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement detector.py with functions for background subtraction, contour detection, and vehicle classification. Use Haar cascades or HOG+SVM for initial detection. Implement tracking to maintain vehicle IDs across frames. Optimize for Jetson Nano performance with YOUR_INPUT_REQUIRED comments for hardware acceleration options.",
+            "status": "pending",
+            "testStrategy": "Test with pre-recorded traffic videos of varying complexity, measure detection accuracy and processing speed."
+          },
+          {
+            "id": 3,
+            "title": "Implement Speed Estimation Algorithm",
+            "description": "Extend detector.py to calculate vehicle speeds based on frame-to-frame position changes and calibration parameters.",
+            "dependencies": [
+              2
+            ],
+            "details": "Add functions to track vehicle positions across multiple frames, calculate pixel displacement, and convert to real-world speed using calibration factors. Implement perspective correction for accurate measurements. Include configuration options for road orientation and camera angle with YOUR_INPUT_REQUIRED comments for site-specific calibration.",
+            "status": "pending",
+            "testStrategy": "Validate with vehicles of known speed, test under different lighting conditions and camera angles."
+          },
+          {
+            "id": 4,
+            "title": "Develop Color Distribution Analysis",
+            "description": "Extend detector.py to analyze the color distribution of detected vehicles using OpenCV color processing.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement color space conversion (RGB to HSV), color binning, and histogram analysis to categorize vehicles by dominant colors. Create functions to extract vehicle ROI, filter out shadows/reflections, and generate normalized color distribution data. Add YOUR_INPUT_REQUIRED comments for color threshold tuning based on lighting conditions.",
+            "status": "pending",
+            "testStrategy": "Test with vehicles of various colors under different lighting conditions, verify color classification accuracy."
+          },
+          {
+            "id": 5,
+            "title": "Create Configuration Management System",
+            "description": "Implement a flexible configuration system using YAML and environment variables to control all aspects of the camera pipeline.",
+            "dependencies": [],
+            "details": "Create config.yaml with sections for camera settings (index, resolution, FPS), detection parameters (ROI coordinates, sensitivity), speed calculation factors, and backend connection details. Implement config loading with environment variable overrides. Add validation for all parameters and provide detailed error messages for misconfiguration.",
+            "status": "pending",
+            "testStrategy": "Test with various configuration combinations, verify proper parameter validation and error handling."
+          },
+          {
+            "id": 6,
+            "title": "Implement Backend Publisher with Error Handling (publisher.py)",
+            "description": "Create a reliable data publishing module that converts detection results to JSON and sends them to the backend API.",
+            "dependencies": [
+              2,
+              3,
+              4,
+              5
+            ],
+            "details": "Implement publisher.py with functions to format detection data (vehicle counts, speeds, color distributions) as JSON matching the backend schema. Add robust error handling for network issues, including queuing of failed transmissions for retry. Implement configurable publishing frequency and batch size options. Include logging of all publishing attempts and results.",
+            "status": "pending",
+            "testStrategy": "Test with simulated network failures, verify data integrity, test with backend API to ensure format compatibility."
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-11-07T19:25:22.491Z",
+      "description": "Default tasks context",
+      "updated": "2025-11-07T19:26:05.496Z"
+    }
+  }
+}

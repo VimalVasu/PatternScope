@@ -1,0 +1,49 @@
+# Task ID: 1
+# Title: Phase 0 - Skeleton & Environment Setup
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Create minimal but correct multi-service skeleton with docker-compose setup
+# Details:
+Deliverables: docker-compose.yml with services (db, backend, dashboard, analysis, edge-mock, ollama), Dockerfiles for each service, health-check endpoints for all services, .env.example files
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Create Dockerfiles for each service [pending]
+### Dependencies: None
+### Description: Develop Dockerfiles for all six services: db, backend, dashboard, analysis, edge-mock, and ollama
+### Details:
+Create individual Dockerfiles for each service with appropriate base images, dependencies, and configurations. For db, use PostgreSQL image; for backend, use Node.js; for dashboard, use Node.js with React; for analysis, use Python with data science libraries; for edge-mock, use a lightweight Node.js or Python image; for ollama, use the official ollama image with necessary configurations.
+
+## 2. Configure docker-compose.yml [pending]
+### Dependencies: 1.1
+### Description: Create a docker-compose.yml file that properly connects all services with appropriate networking, volumes, and dependencies
+### Details:
+Define all six services in docker-compose.yml with proper configuration including: network settings, volume mounts for persistent data, environment variable references, port mappings, health checks, restart policies, and service dependencies. Ensure services can communicate with each other using service names as hostnames.
+
+## 3. Implement health check endpoints [pending]
+### Dependencies: 1.1
+### Description: Create health check endpoints for all services to enable monitoring and dependency validation
+### Details:
+For each service, implement a /health or /healthz endpoint that returns HTTP 200 OK when the service is functioning properly. For the backend, dashboard, analysis, and edge-mock services, implement custom health checks that verify connectivity to dependent services. For db, configure PostgreSQL health checks. For ollama, implement or configure appropriate health verification.
+
+## 4. Set up environment variable configuration [pending]
+### Dependencies: None
+### Description: Create .env.example files for all services with required configuration variables
+### Details:
+Create .env.example files for each service containing all necessary environment variables with example values. Include database connection strings, API endpoints, service URLs, ports, credentials (with dummy values), logging levels, and any service-specific configuration options. Document each variable with comments explaining its purpose and acceptable values.
+
+## 5. Initialize database schema [pending]
+### Dependencies: 1.2
+### Description: Create initialization scripts for the database service to set up required tables and schemas
+### Details:
+Develop SQL initialization scripts that will run when the database container starts. Create tables for traffic_events, anomalies, and any other required data structures. Include appropriate indexes, constraints, and relationships. Mount these scripts in the db service configuration to ensure they run on first startup.
+
+## 6. Create minimal service skeletons [pending]
+### Dependencies: 1.1, 1.2, 1.3, 1.4
+### Description: Implement minimal but functional code for each service to verify the overall architecture
+### Details:
+For each service, create minimal implementation code that starts the service, responds to health checks, and provides basic functionality: backend with basic API endpoints, dashboard with minimal UI, analysis service with endpoint structure, edge-mock with basic configuration, and verify ollama is properly configured. Ensure each service logs startup information and can handle basic error conditions.
+

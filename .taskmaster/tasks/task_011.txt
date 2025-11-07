@@ -1,0 +1,49 @@
+# Task ID: 11
+# Title: Phase 4 - Real Camera Integration
+# Status: pending
+# Dependencies: 2, 4
+# Priority: low
+# Description: Implement Jetson Nano camera pipeline for real traffic monitoring
+# Details:
+Create capture.py (read camera frames), detector.py (extract vehicle counts, speeds, color distribution using OpenCV), publisher.py (convert to JSON and POST to backend). Make configurable via config.yaml/env (camera index, ROI, frame rate). Handle camera disconnects gracefully. Mark areas requiring Jetson-specific tuning with YOUR_INPUT_REQUIRED comments.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement Camera Capture Module (capture.py) [pending]
+### Dependencies: None
+### Description: Create a robust camera capture module that interfaces with the Jetson Nano camera hardware to acquire video frames.
+### Details:
+Implement capture.py to initialize camera connection using OpenCV/GStreamer, set resolution and frame rate, implement frame buffering, and handle camera disconnects with automatic reconnection attempts. Include YOUR_INPUT_REQUIRED comments for Jetson-specific camera parameters that need tuning.
+
+## 2. Develop Vehicle Detection Algorithm (detector.py) [pending]
+### Dependencies: 11.1
+### Description: Create the core vehicle detection functionality using OpenCV to identify and count vehicles from camera frames.
+### Details:
+Implement detector.py with functions for background subtraction, contour detection, and vehicle classification. Use Haar cascades or HOG+SVM for initial detection. Implement tracking to maintain vehicle IDs across frames. Optimize for Jetson Nano performance with YOUR_INPUT_REQUIRED comments for hardware acceleration options.
+
+## 3. Implement Speed Estimation Algorithm [pending]
+### Dependencies: 11.2
+### Description: Extend detector.py to calculate vehicle speeds based on frame-to-frame position changes and calibration parameters.
+### Details:
+Add functions to track vehicle positions across multiple frames, calculate pixel displacement, and convert to real-world speed using calibration factors. Implement perspective correction for accurate measurements. Include configuration options for road orientation and camera angle with YOUR_INPUT_REQUIRED comments for site-specific calibration.
+
+## 4. Develop Color Distribution Analysis [pending]
+### Dependencies: 11.2
+### Description: Extend detector.py to analyze the color distribution of detected vehicles using OpenCV color processing.
+### Details:
+Implement color space conversion (RGB to HSV), color binning, and histogram analysis to categorize vehicles by dominant colors. Create functions to extract vehicle ROI, filter out shadows/reflections, and generate normalized color distribution data. Add YOUR_INPUT_REQUIRED comments for color threshold tuning based on lighting conditions.
+
+## 5. Create Configuration Management System [pending]
+### Dependencies: None
+### Description: Implement a flexible configuration system using YAML and environment variables to control all aspects of the camera pipeline.
+### Details:
+Create config.yaml with sections for camera settings (index, resolution, FPS), detection parameters (ROI coordinates, sensitivity), speed calculation factors, and backend connection details. Implement config loading with environment variable overrides. Add validation for all parameters and provide detailed error messages for misconfiguration.
+
+## 6. Implement Backend Publisher with Error Handling (publisher.py) [pending]
+### Dependencies: 11.2, 11.3, 11.4, 11.5
+### Description: Create a reliable data publishing module that converts detection results to JSON and sends them to the backend API.
+### Details:
+Implement publisher.py with functions to format detection data (vehicle counts, speeds, color distributions) as JSON matching the backend schema. Add robust error handling for network issues, including queuing of failed transmissions for retry. Implement configurable publishing frequency and batch size options. Include logging of all publishing attempts and results.
+

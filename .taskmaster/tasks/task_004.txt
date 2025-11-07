@@ -1,0 +1,25 @@
+# Task ID: 4
+# Title: Phase 1 - Edge Mock Publisher
+# Status: pending
+# Dependencies: 2, 3
+# Priority: medium
+# Description: Create mock data generator that publishes traffic events to backend
+# Details:
+Build edge-mock container that sends valid random JSON every N seconds to http://backend:PORT/ingest/traffic. Generate realistic vehicle_count, speeds, color_counts, and other required fields matching the traffic_events schema.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement Random Traffic Data Generator with Realistic Patterns [pending]
+### Dependencies: None
+### Description: Create a module that generates realistic mock traffic event data matching the required schema with appropriate distributions for vehicle counts, speeds, and color distributions.
+### Details:
+Develop a data generation module that produces JSON objects with fields matching the traffic_events schema including vehicle_count, avg_speed, min_speed, max_speed, color_counts, inter_arrival_stats, and traffic_density_score. Implement time-of-day variations to simulate rush hours and weekend patterns. Use statistical distributions (normal, poisson) for realistic vehicle counts and speeds. Generate color distributions based on real-world vehicle color popularity statistics.
+
+## 2. Build HTTP Publisher with Configurable Intervals [pending]
+### Dependencies: 4.1
+### Description: Implement a service that publishes the generated mock traffic data to the backend API at configurable time intervals with proper error handling.
+### Details:
+Create a publisher service that sends HTTP POST requests to http://backend:PORT/ingest/traffic endpoint. Implement configurable publishing frequency (N seconds) via environment variables. Add proper error handling for connection failures and API rejections. Include retry logic with exponential backoff. Package the generator and publisher into a containerized service with appropriate logging. Ensure the container can be configured via environment variables for backend URL, port, and publishing interval.
+

@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: patternscope-db
+    environment:
+      POSTGRES_DB: patternscope
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d/migrations
+      - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - patternscope-network
+
+  backend:
+    build: ./backend
+    container_name: patternscope-backend
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: patternscope
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - patternscope-network
+    restart: unless-stopped
+
+  analysis:
+    build: ./analysis
+    container_name: patternscope-analysis
+    environment:
+      PORT: 8000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: patternscope
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: llama2
+      OLLAMA_TIMEOUT: 30
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - patternscope-network
+    restart: unless-stopped
+
+  edge-mock:
+    build: ./edge-mock
+    container_name: patternscope-edge-mock
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: 3000
+      PUBLISH_INTERVAL: 10
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - patternscope-network
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    container_name: patternscope-dashboard
+    environment:
+      VITE_BACKEND_URL: http://localhost:3000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - patternscope-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: patternscope-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - patternscope-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
+
+networks:
+  patternscope-network:
+    driver: bridge

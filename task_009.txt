@@ -1,0 +1,43 @@
+# Task ID: 9
+# Title: Testing Infrastructure - Unit & Integration Tests
+# Status: pending
+# Dependencies: 2, 5
+# Priority: high
+# Description: Set up comprehensive testing for backend and analysis services
+# Details:
+Backend: schema validation tests, repository/DB write tests, integration tests for /ingest/traffic and /metrics endpoints. Analysis: unit tests for anomaly detection with synthetic data, integration tests for /run-analysis. Use test stubs for LLM client.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Backend Unit Test Setup for Schema Validation and Repository [pending]
+### Dependencies: None
+### Description: Implement unit tests for backend schema validation and repository layer functionality
+### Details:
+Create Jest test suite for TypeScript backend with test fixtures for traffic_events schema validation. Implement unit tests for repository layer with mocked database connections. Set up test database configuration and test data factories. Focus on POST /ingest/traffic endpoint validation and traffic_events table write operations.
+
+## 2. Backend Integration Test Setup for API Endpoints [pending]
+### Dependencies: 9.1
+### Description: Implement integration tests for backend API endpoints with database interactions
+### Details:
+Set up integration test environment for backend with test database. Create tests for /ingest/traffic and /metrics endpoints that verify complete request-to-database flows. Implement test fixtures to seed and clean database between tests. Verify response formats match API specifications and data is correctly persisted and retrieved.
+
+## 3. Analysis Service Unit Tests for Anomaly Detection [pending]
+### Dependencies: None
+### Description: Create unit tests for Python analysis service core algorithms using synthetic data
+### Details:
+Implement pytest suite for anomaly detection algorithms. Create synthetic data generators for normal and anomalous traffic patterns. Test z-score, IQR, and machine learning detection methods individually. Verify detection thresholds and accuracy metrics. Mock database interactions to focus on algorithm testing.
+
+## 4. Analysis Service Integration Tests for API Endpoints [pending]
+### Dependencies: 9.3
+### Description: Implement integration tests for analysis service API endpoints and database interactions
+### Details:
+Create integration tests for /run-analysis endpoint that verify the complete flow from receiving request to writing results in the anomalies table. Set up test database fixtures with pre-populated traffic_events data. Verify anomaly detection results are correctly identified and persisted. Test different time ranges and traffic patterns.
+
+## 5. LLM Client Test Stub Implementation [pending]
+### Dependencies: 9.3, 9.4
+### Description: Create test stubs for LLM client to enable reliable testing of dependent components
+### Details:
+Implement mock LLM client that returns predefined responses for different input patterns. Create test fixtures that can be used across unit and integration tests. Define standard test cases for trend analysis and suggestion generation. Ensure stubs can simulate both successful responses and error conditions from the LLM service.
+

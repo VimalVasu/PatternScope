@@ -1,0 +1,37 @@
+# Task ID: 6
+# Title: Phase 2 - LLM Trend Summarization
+# Status: pending
+# Dependencies: 5
+# Priority: medium
+# Description: Integrate Ollama for human-readable trend suggestions
+# Details:
+Implement LLM client (URL + model from env) with timeout and error handling. Summarize detected anomalies and recurring patterns. Output bullet-style suggestions to trend_suggestions table. Add interface for test stubbing. Do NOT use LLM for anomaly classification - only for narrative summaries.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement Ollama LLM Client with Error Handling [pending]
+### Dependencies: None
+### Description: Create a client module to interact with Ollama LLM service, configurable via environment variables with proper timeout and error handling.
+### Details:
+Develop a client class that connects to Ollama using URL and model name from environment variables. Implement timeout mechanism (default 10s), retry logic (max 3 attempts), and comprehensive error handling for network issues, malformed responses, and service unavailability. Include logging for all operations and errors. The client should expose a simple async interface for sending prompts and receiving responses.
+
+## 2. Design Prompt Engineering for Trend Summarization [pending]
+### Dependencies: 6.1
+### Description: Create effective prompts for the LLM to generate human-readable summaries of detected anomalies and recurring patterns.
+### Details:
+Develop a prompt template system that structures anomaly data for the LLM. Include context about traffic patterns, specific instructions for bullet-style formatting, and examples of good summaries. Implement prompt versioning to track effectiveness. Create a module that transforms structured anomaly data into appropriate prompts, ensuring that prompts remain within token limits and contain sufficient context for meaningful summaries without using LLM for anomaly classification itself.
+
+## 3. Implement Database Integration for Trend Suggestions [pending]
+### Dependencies: 6.2
+### Description: Create data models and repository functions to store and retrieve LLM-generated trend suggestions in the database.
+### Details:
+Implement a TrendSuggestion model with fields for id, timestamp, source_anomalies (array of anomaly IDs), suggestion_text (bullet-formatted text from LLM), and metadata. Create repository functions for inserting new suggestions and querying suggestions by time range or related anomalies. Ensure proper transaction handling when storing suggestions that reference multiple anomalies. Add indexes for efficient querying of trend suggestions.
+
+## 4. Create Test Stubbing Interface for LLM Integration [pending]
+### Dependencies: 6.1, 6.2, 6.3
+### Description: Develop an interface that allows for easy substitution of the LLM client with test doubles during testing.
+### Details:
+Design an abstract interface (LLMClientInterface) that both the real Ollama client and test stubs can implement. Create a factory pattern for client instantiation that can be configured to return test stubs. Implement a configurable test stub that can return predefined responses for given prompts or simulate various error conditions. Add a mechanism to record prompts sent to the LLM for verification in tests. Ensure the interface supports both synchronous and asynchronous testing approaches.
+

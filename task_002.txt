@@ -1,0 +1,37 @@
+# Task ID: 2
+# Title: Phase 1 - Backend Ingestion API
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Implement POST /ingest/traffic endpoint to accept and persist traffic events
+# Details:
+Create validation for JSON body, implement traffic_events table writes, add GET /metrics/traffic endpoint with start/end query params returning vehicle count, avg speed, and timeseries data. Use TypeScript + Fastify.
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Implement JSON Schema Validation for Traffic Events [pending]
+### Dependencies: None
+### Description: Create validation schema for the traffic events JSON payload that will be received by the POST /ingest/traffic endpoint.
+### Details:
+Define TypeScript interfaces for traffic event data structure. Implement JSON schema validation using Fastify's built-in validation capabilities. Schema should validate required fields: timestamp, location_id, vehicle_count, avg_speed, and optional fields like min_speed, max_speed, color_counts, inter_arrival_stats, traffic_density_score, and raw_features. Include proper error handling for validation failures.
+
+## 2. Create Traffic Events Repository Layer [pending]
+### Dependencies: 2.1
+### Description: Implement the database repository layer for persisting and retrieving traffic events from the traffic_events table.
+### Details:
+Create a TrafficEventsRepository class with methods for inserting new traffic events and querying events with time-based filters. Implement database connection handling, SQL query construction, and error handling. Use prepared statements for security. Ensure proper transaction handling for batch inserts. The repository should be designed with a clean interface that abstracts database operations from the API layer.
+
+## 3. Implement POST /ingest/traffic Endpoint [pending]
+### Dependencies: 2.1, 2.2
+### Description: Create the REST API endpoint for ingesting traffic event data with proper request validation and response handling.
+### Details:
+Implement a Fastify route handler for POST /ingest/traffic that validates incoming requests using the JSON schema, processes the validated data, and persists it to the database using the repository layer. Include appropriate HTTP status codes for success (201) and error scenarios (400, 500). Implement request logging and performance metrics collection. Handle both single event and batch event ingestion patterns.
+
+## 4. Implement GET /metrics/traffic Endpoint with Aggregation Logic [pending]
+### Dependencies: 2.2
+### Description: Create the metrics endpoint that aggregates traffic data based on time range parameters and returns statistical summaries.
+### Details:
+Implement a Fastify route handler for GET /metrics/traffic that accepts start and end query parameters for time filtering. Create aggregation functions to calculate vehicle count totals, average speeds, and generate timeseries data with appropriate time buckets (hourly, daily). Implement efficient database queries that leverage indexes for time-based filtering. Format response data according to API specifications with proper metadata about the aggregation period.
+

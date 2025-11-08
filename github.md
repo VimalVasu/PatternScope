@@ -101,7 +101,7 @@ git add path/to/file.js      # Add specific file
 git commit -m "feat: add user authentication"
 
 # 4. Push to GitHub
-git push
+git push origin main
 ```
 
 ### Commit Message Best Practices

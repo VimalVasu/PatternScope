@@ -1,0 +1,200 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: analysis/main.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Main entry point for the PatternScope Analysis Service.
+ *   Provides REST API for running anomaly detection algorithms on traffic data
+ *   and generating AI-powered trend suggestions using LLM.
+ *
+ * SYSTEM FIT:
+ *   - Separate microservice focused solely on ML/AI processing
+ *   - Reads traffic data from PostgreSQL database
+ *   - Detects anomalies using multiple statistical and ML algorithms
+ *   - Calls Ollama LLM service for human-readable insights
+ *   - Writes detected anomalies and suggestions back to database
+ *   - Triggered on-demand by dashboard or scheduled jobs
+ *
+ * KEY DEPENDENCIES:
+ *   → services/analysis.py - Core anomaly detection algorithms
+ *   → services/llm_client.py - Ollama LLM integration
+ *   → services/db.py - Database access layer
+ *   → PostgreSQL database - Data source and storage
+ *   → Ollama service - LLM for generating insights
+ *
+ * CALLED BY:
+ *   - Dashboard "Run Analysis" button (if implemented)
+ *   - Scheduled cron jobs or background workers
+ *   - Manual API calls for testing
+ *
+ * CALLS:
+ *   - AnalysisService for anomaly detection
+ *   - OllamaClient for LLM insights
+ *   - Database for reading traffic events and storing results
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT FastAPI framework
+IMPORT AnalysisService FROM services/analysis.pseudo
+IMPORT OllamaClient FROM services/llm_client.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// APPLICATION SETUP
+// ═══════════════════════════════════════════════════════════════════
+
+CREATE web_app AS FastAPI WITH:
+    title: "PatternScope Analysis Service"
+
+// Enable CORS to allow requests from dashboard
+CONFIGURE CORS:
+    allow_all_origins = true
+    allow_credentials = true
+    allow_all_methods = true
+    allow_all_headers = true
+
+
+// ═══════════════════════════════════════════════════════════════════
+// SERVICE INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════
+
+INITIALIZE analysis_service AS new AnalysisService()
+
+INITIALIZE llm_client AS new OllamaClient WITH:
+    url: ENV_VAR("OLLAMA_URL", default: "http://ollama:11434")
+    model: ENV_VAR("OLLAMA_MODEL", default: "llama2")
+
+
+// ═══════════════════════════════════════════════════════════════════
+// REQUEST SCHEMA
+// ═══════════════════════════════════════════════════════════════════
+
+DEFINE AnalysisRequest AS:
+    start: datetime string (optional)                    // Analyze events after this time
+    end: datetime string (optional)                      // Analyze events before this time
+    methods: array of strings (optional)                 // Which algorithms to use
+    // Default methods: ['zscore', 'iqr', 'isolation_forest']
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /health
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/health":
+    """
+    Health check endpoint for service monitoring.
+
+    Called by: Docker health checks, monitoring systems
+    """
+
+    RETURN HTTP 200 (OK):
+        status: "ok"
+        timestamp: current_datetime_ISO8601
+        service: "analysis"
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: POST /run-analysis
+// High-level flow: Validate request → Run anomaly detection → Generate LLM insights → Return results
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT POST "/run-analysis":
+    """
+    Executes anomaly detection on traffic data and generates AI insights.
+
+    This is the main processing endpoint that:
+    1. Fetches traffic events from database
+    2. Runs multiple anomaly detection algorithms
+    3. Stores detected anomalies in database
+    4. If anomalies found, calls LLM to generate human-readable suggestions
+    5. Stores suggestions in database
+    6. Returns summary of analysis
+
+    Request Body:
+        start: Optional start datetime for analysis window
+        end: Optional end datetime for analysis window
+        methods: Optional array of detection methods to use
+
+    Called by: Dashboard, scheduled jobs, or manual API calls
+    Calls: AnalysisService, OllamaClient, Database
+    """
+
+    EXTRACT request_data FROM request_body
+
+    TRY:
+        // ─────────────────────────────────────────────────────────────
+        // Step 1: Parse and validate date range
+        // ─────────────────────────────────────────────────────────────
+        IF request_data.start IS provided:
+            start_datetime = PARSE_DATETIME(request_data.start)
+        ELSE:
+            start_datetime = null
+
+        IF request_data.end IS provided:
+            end_datetime = PARSE_DATETIME(request_data.end)
+        ELSE:
+            end_datetime = null
+
+        // Determine which detection methods to use
+        detection_methods = request_data.methods OR ['zscore', 'iqr', 'isolation_forest']
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 2: Run anomaly detection
+        // ─────────────────────────────────────────────────────────────
+        analysis_result = AWAIT analysis_service.run_analysis(
+            start: start_datetime,
+            end: end_datetime,
+            methods: detection_methods
+        )
+
+        /**
+         * analysis_result contains:
+         * - success: boolean
+         * - anomalies_detected: integer count
+         * - anomaly_details: array of detected anomalies
+         * - period: {start, end}
+         * - methods_used: array of algorithm names
+         */
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 3: Generate AI insights if anomalies were found
+        // ─────────────────────────────────────────────────────────────
+        IF analysis_result.anomalies_detected > 0:
+            // Call LLM to generate human-readable trend suggestions
+            suggestions = AWAIT llm_client.generate_trend_suggestions(
+                anomalies: analysis_result.anomaly_details,
+                start: start_datetime,
+                end: end_datetime
+            )
+
+            // Add suggestions to result
+            analysis_result.suggestions = suggestions
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 4: Return complete analysis result
+        // ─────────────────────────────────────────────────────────────
+        RETURN HTTP 200 (OK):
+            analysis_result
+
+    CATCH validation_error:
+        RETURN HTTP 400 (Bad Request):
+            detail: error_message
+
+    CATCH internal_error:
+        RETURN HTTP 500 (Internal Server Error):
+            detail: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// SERVER STARTUP
+// ═══════════════════════════════════════════════════════════════════
+
+IF executed_as_main_script:
+    port = ENV_VAR("PORT", default: 8000)
+
+    START server WITH:
+        host: "0.0.0.0"
+        port: port
+
+    LOG "Analysis service running on http://0.0.0.0:" + port

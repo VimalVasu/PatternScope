@@ -1,0 +1,168 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/components/DateRangeSelector.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Interactive date/time range picker with refresh button.
+ *   Allows users to select custom time windows for viewing traffic data.
+ *   Provides manual refresh trigger to reload data with selected range.
+ *
+ * SYSTEM FIT:
+ *   - User control component for filtering dashboard data
+ *   - Updates parent component's state via onChange callback
+ *   - Triggers data refresh via onRefresh callback
+ *   - Disables inputs during loading to prevent race conditions
+ *
+ * KEY DEPENDENCIES:
+ *   → DateRangeSelector.css - Component styling
+ *   → App.jsx - Parent component managing state and data fetching
+ *
+ * CALLED BY:
+ *   - App.jsx when rendering dashboard controls
+ *
+ * CALLS:
+ *   - onChange prop function when dates change
+ *   - onRefresh prop function when refresh button clicked
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT React
+IMPORT styles FROM ./DateRangeSelector.css
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT: DateRangeSelector
+// ═══════════════════════════════════════════════════════════════════
+
+COMPONENT DateRangeSelector({ dateRange, onChange, onRefresh, loading }):
+    """
+    Date/time range selector with refresh button.
+
+    Props:
+        dateRange: Object with {start, end} ISO8601 datetime strings
+        onChange: Function(newRange) - Called when user changes dates
+        onRefresh: Function() - Called when user clicks refresh button
+        loading: Boolean - Disables inputs and button while loading
+
+    Usage:
+        <DateRangeSelector
+            dateRange={{start: "2025-11-07T00:00", end: "2025-11-07T23:59"}}
+            onChange={(range) => setDateRange(range)}
+            onRefresh={() => fetchData()}
+            loading={false}
+        />
+    """
+
+    // ═══════════════════════════════════════════════════════════════
+    // EVENT HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
+    FUNCTION handleStartChange(event):
+        """
+        Called when user changes the start datetime input.
+        Updates parent state with new start time, keeping end time unchanged.
+        """
+        new_start_value = event.target.value
+
+        CALL onChange({
+            ...dateRange,           // Spread existing range
+            start: new_start_value  // Override start
+        })
+
+
+    FUNCTION handleEndChange(event):
+        """
+        Called when user changes the end datetime input.
+        Updates parent state with new end time, keeping start time unchanged.
+        """
+        new_end_value = event.target.value
+
+        CALL onChange({
+            ...dateRange,         // Spread existing range
+            end: new_end_value    // Override end
+        })
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // RENDER UI
+    // ═══════════════════════════════════════════════════════════════
+
+    RETURN (
+        <div className="date-range-selector">
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* DATE/TIME INPUTS */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="date-input-group">
+
+                {/* Start DateTime Input */}
+                <label>
+                    Start:
+                    <input
+                        type="datetime-local"
+                        value={dateRange.start}
+                        onChange={handleStartChange}
+                        disabled={loading}
+                    />
+                </label>
+
+                {/* End DateTime Input */}
+                <label>
+                    End:
+                    <input
+                        type="datetime-local"
+                        value={dateRange.end}
+                        onChange={handleEndChange}
+                        disabled={loading}
+                    />
+                </label>
+
+            </div>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* REFRESH BUTTON */}
+            {/* ───────────────────────────────────────────────── */}
+            <button
+                className="refresh-button"
+                onClick={onRefresh}
+                disabled={loading}
+            >
+                {loading ? "Loading..." : "Refresh"}
+            </button>
+
+        </div>
+    )
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT DEFAULT DateRangeSelector
+
+/**
+ * User Interaction Flow:
+ *
+ * 1. User changes start date
+ *    → handleStartChange called
+ *    → onChange prop called with new range
+ *    → Parent (App.jsx) updates state
+ *    → Component re-renders with new value
+ *
+ * 2. User changes end date
+ *    → handleEndChange called
+ *    → onChange prop called with new range
+ *    → Parent updates state
+ *    → Component re-renders
+ *
+ * 3. User clicks "Refresh"
+ *    → onRefresh prop called
+ *    → Parent fetches data with current date range
+ *    → loading becomes true
+ *    → Inputs and button disabled
+ *    → Button text changes to "Loading..."
+ *
+ * Note: Date changes do NOT auto-refresh data.
+ * User must explicitly click "Refresh" to reload data.
+ */

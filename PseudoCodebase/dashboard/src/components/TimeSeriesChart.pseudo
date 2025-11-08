@@ -1,0 +1,212 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/components/TimeSeriesChart.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Visualizes traffic data over time as interactive charts.
+ *   Displays vehicle counts and average speeds as line/bar charts
+ *   showing hourly trends. Helps identify patterns and anomalies visually.
+ *
+ * SYSTEM FIT:
+ *   - Primary data visualization component
+ *   - Receives hourly-aggregated timeseries data from App.jsx
+ *   - Uses charting library (likely Recharts) for interactive visualizations
+ *   - Helps users spot trends, patterns, rush hours, and anomalies
+ *
+ * KEY DEPENDENCIES:
+ *   → TimeSeriesChart.css - Component styling
+ *   → Recharts library (or similar) - Chart rendering
+ *   → App.jsx - Parent component providing timeseries data
+ *
+ * CALLED BY:
+ *   - App.jsx when rendering dashboard content
+ *
+ * CALLS:
+ *   - Charting library components (LineChart, BarChart, etc.)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT React
+IMPORT Recharts components (LineChart, BarChart, XAxis, YAxis, Tooltip, Legend, Line, Bar, etc.)
+IMPORT styles FROM ./TimeSeriesChart.css
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT: TimeSeriesChart
+// ═══════════════════════════════════════════════════════════════════
+
+COMPONENT TimeSeriesChart({ data }):
+    """
+    Renders interactive time-series charts for traffic data visualization.
+
+    Props:
+        data: Array of timeseries objects:
+            - time_bucket: datetime (hourly buckets)
+            - vehicle_count: number
+            - avg_speed: number
+            - event_count: number
+
+    Usage:
+        <TimeSeriesChart data={timeseriesData} />
+
+    Typical Visualization:
+        - Line chart showing vehicle counts over time
+        - Line chart showing average speeds over time
+        - X-axis: Time (hourly buckets)
+        - Y-axis: Values (scaled appropriately)
+        - Interactive tooltips showing exact values on hover
+    """
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    FUNCTION formatTime(timestamp):
+        """
+        Formats timestamp for X-axis labels.
+        Converts ISO8601 datetime to readable format.
+
+        Example:
+            "2025-11-07T14:00:00Z" → "14:00"
+            or "Nov 7, 14:00"
+        """
+        date_object = PARSE_DATE(timestamp)
+        RETURN date_object.format("MMM D, HH:mm")
+
+
+    FUNCTION formatValue(value, metric_type):
+        """
+        Formats values for tooltips and Y-axis.
+
+        Examples:
+            (1234, "count") → "1,234"
+            (45.678, "speed") → "45.7 km/h"
+        """
+        IF metric_type == "speed":
+            RETURN value.toFixed(1) + " km/h"
+        ELSE:
+            RETURN value.toLocaleString()
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // HANDLE EMPTY DATA
+    // ═══════════════════════════════════════════════════════════════
+
+    IF data IS empty OR data.length == 0:
+        RETURN (
+            <div className="chart-container">
+                <p className="no-data-message">
+                    No timeseries data available for the selected period.
+                </p>
+            </div>
+        )
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // RENDER CHARTS
+    // ═══════════════════════════════════════════════════════════════
+
+    RETURN (
+        <div className="timeseries-chart-container">
+
+            <h2>Traffic Trends Over Time</h2>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CHART 1: Vehicle Count Over Time */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="chart">
+                <h3>Vehicle Count</h3>
+
+                <LineChart
+                    width={800}
+                    height={300}
+                    data={data}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <XAxis
+                        dataKey="time_bucket"
+                        tickFormatter={formatTime}
+                    />
+                    <YAxis
+                        label={{ value: "Vehicle Count", angle: -90, position: "insideLeft" }}
+                    />
+                    <Tooltip
+                        formatter={(value) => formatValue(value, "count")}
+                        labelFormatter={formatTime}
+                    />
+                    <Legend />
+                    <Line
+                        type="monotone"
+                        dataKey="vehicle_count"
+                        stroke="#8884d8"
+                        name="Vehicles"
+                        strokeWidth={2}
+                    />
+                </LineChart>
+            </div>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CHART 2: Average Speed Over Time */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="chart">
+                <h3>Average Speed</h3>
+
+                <LineChart
+                    width={800}
+                    height={300}
+                    data={data}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <XAxis
+                        dataKey="time_bucket"
+                        tickFormatter={formatTime}
+                    />
+                    <YAxis
+                        label={{ value: "Speed (km/h)", angle: -90, position: "insideLeft" }}
+                    />
+                    <Tooltip
+                        formatter={(value) => formatValue(value, "speed")}
+                        labelFormatter={formatTime}
+                    />
+                    <Legend />
+                    <Line
+                        type="monotone"
+                        dataKey="avg_speed"
+                        stroke="#82ca9d"
+                        name="Avg Speed"
+                        strokeWidth={2}
+                    />
+                </LineChart>
+            </div>
+
+        </div>
+    )
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT DEFAULT TimeSeriesChart
+
+/**
+ * Chart Interpretation:
+ *
+ * Vehicle Count Chart:
+ * - Shows traffic volume patterns
+ * - Peaks during rush hours (7-9 AM, 5-7 PM)
+ * - Low during night hours (10 PM - 5 AM)
+ * - Anomalies appear as unexpected spikes or drops
+ *
+ * Average Speed Chart:
+ * - Shows flow efficiency
+ * - Lower speeds during congestion
+ * - Higher speeds during light traffic
+ * - Sudden changes may indicate incidents
+ *
+ * Interactive Features:
+ * - Hover tooltips show exact values
+ * - Click legend to toggle series visibility
+ * - Responsive sizing for different screens
+ */

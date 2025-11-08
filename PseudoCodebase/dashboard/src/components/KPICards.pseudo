@@ -1,0 +1,158 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: dashboard/src/components/KPICards.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Displays key performance indicators (KPIs) as a grid of summary cards.
+ *   Shows high-level metrics: total events, vehicles, average speed, and anomalies.
+ *   Provides at-a-glance overview of traffic system status.
+ *
+ * SYSTEM FIT:
+ *   - Pure presentational component (no business logic)
+ *   - Receives data via props from App.jsx
+ *   - First major widget in dashboard layout
+ *   - Formats and displays summary statistics in user-friendly format
+ *
+ * KEY DEPENDENCIES:
+ *   → KPICards.css - Styling for card layout
+ *   → App.jsx - Parent component that provides summary data
+ *
+ * CALLED BY:
+ *   - App.jsx when rendering dashboard content
+ *
+ * CALLS:
+ *   - None (pure presentational component)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT React
+IMPORT styles FROM ./KPICards.css
+
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT: KPICards
+// ═══════════════════════════════════════════════════════════════════
+
+COMPONENT KPICards({ summary }):
+    """
+    Renders a grid of KPI summary cards.
+
+    Props:
+        summary: Object containing:
+            - event_count: number
+            - total_vehicles: number
+            - average_speed: number
+            - anomaly_count: number
+
+    Usage:
+        <KPICards summary={summaryData} />
+    """
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // Format numbers and values for display
+    // ═══════════════════════════════════════════════════════════════
+
+    FUNCTION formatNumber(num):
+        """
+        Formats numbers with thousand separators.
+        Handles null/undefined gracefully.
+
+        Examples:
+            1234 → "1,234"
+            null → "N/A"
+        """
+        IF num IS null OR num IS undefined:
+            RETURN "N/A"
+
+        IF num IS number:
+            RETURN num.toLocaleString()  // Adds thousand separators
+        ELSE:
+            RETURN num
+
+
+    FUNCTION formatSpeed(speed):
+        """
+        Formats speed values with unit (km/h) and one decimal place.
+
+        Examples:
+            45.678 → "45.7 km/h"
+            null → "N/A"
+        """
+        IF speed IS null OR speed IS undefined:
+            RETURN "N/A"
+
+        RETURN speed.toFixed(1) + " km/h"
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // RENDER UI
+    // Four-card grid layout
+    // ═══════════════════════════════════════════════════════════════
+
+    RETURN (
+        <div className="kpi-cards">
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CARD 1: Total Events */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="kpi-card">
+                <h3>Total Events</h3>
+                <div className="kpi-value">
+                    {formatNumber(summary.event_count)}
+                </div>
+            </div>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CARD 2: Total Vehicles */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="kpi-card">
+                <h3>Total Vehicles</h3>
+                <div className="kpi-value">
+                    {formatNumber(summary.total_vehicles)}
+                </div>
+            </div>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CARD 3: Average Speed */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="kpi-card">
+                <h3>Average Speed</h3>
+                <div className="kpi-value">
+                    {formatSpeed(summary.average_speed)}
+                </div>
+            </div>
+
+            {/* ───────────────────────────────────────────────── */}
+            {/* CARD 4: Anomalies Detected */}
+            {/* Special styling (anomaly-count class) for emphasis */}
+            {/* ───────────────────────────────────────────────── */}
+            <div className="kpi-card">
+                <h3>Anomalies Detected</h3>
+                <div className="kpi-value anomaly-count">
+                    {formatNumber(summary.anomaly_count)}
+                </div>
+            </div>
+
+        </div>
+    )
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT DEFAULT KPICards
+
+/**
+ * Visual Layout:
+ *
+ * ┌────────────────┬────────────────┬────────────────┬────────────────┐
+ * │ Total Events   │ Total Vehicles │ Average Speed  │ Anomalies      │
+ * │                │                │                │ Detected       │
+ * │   1,234        │   45,678       │   42.5 km/h    │   12           │
+ * └────────────────┴────────────────┴────────────────┴────────────────┘
+ *
+ * Responsive grid: Cards stack vertically on mobile devices
+ */

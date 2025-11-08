@@ -1,0 +1,214 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: backend/src/routes/traffic.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Handles traffic event ingestion and metrics retrieval.
+ *   Primary interface for receiving real-time traffic data from edge devices
+ *   and serving aggregated traffic metrics for analysis and visualization.
+ *
+ * SYSTEM FIT:
+ *   - Receives POST requests from edge devices (or edge-mock simulator)
+ *   - Stores raw traffic events in PostgreSQL database
+ *   - Provides aggregated metrics for dashboard and analysis service
+ *   - Acts as the data pipeline entry point for all traffic monitoring
+ *
+ * KEY DEPENDENCIES:
+ *   → db.ts - Database connection pool for all queries
+ *   → traffic_events table in PostgreSQL
+ *
+ * CALLED BY:
+ *   - edge-mock/publisher.py - Sends traffic events via POST /ingest/traffic
+ *   - dashboard frontend - Requests metrics via GET /metrics/traffic
+ *
+ * CALLS:
+ *   - PostgreSQL database (INSERT, SELECT, aggregations)
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT database_connection_pool FROM ../db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA STRUCTURES
+// ═══════════════════════════════════════════════════════════════════
+
+DEFINE TrafficEvent AS:
+    timestamp: datetime (required)            // When the event occurred
+    location_id: integer (required)           // Which sensor/location captured this
+    vehicle_count: integer (required)         // Number of vehicles detected
+    avg_speed: float (optional)               // Average speed of vehicles (km/h)
+    min_speed: float (optional)               // Minimum speed observed
+    max_speed: float (optional)               // Maximum speed observed
+    color_counts: object (optional)           // Distribution of vehicle colors
+    inter_arrival_stats: object (optional)    // Statistics on vehicle arrival intervals
+    traffic_density_score: float (optional)   // Calculated density metric (0-1)
+    raw_features: object (optional)           // Additional sensor data (weather, visibility, etc.)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// VALIDATION SCHEMA
+// Fastify uses JSON schema to automatically validate incoming requests
+// ═══════════════════════════════════════════════════════════════════
+
+DEFINE traffic_event_schema AS:
+    required_fields: [timestamp, location_id, vehicle_count]
+    timestamp: must be ISO 8601 datetime string
+    location_id: must be number
+    vehicle_count: must be number
+    // All other fields are optional and validated as their respective types
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: POST /ingest/traffic
+// High-level flow: Validate → Insert into DB → Return success/failure
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT POST "/ingest/traffic":
+    """
+    Ingests a single traffic event from an edge device.
+    This is the main data entry point for the entire system.
+
+    Called by: edge-mock/publisher.py every 10 seconds
+    Calls: PostgreSQL INSERT query
+    Triggers: Data becomes available for analysis service and dashboard
+    """
+
+    VALIDATE request_body AGAINST traffic_event_schema
+    // Fastify automatically rejects invalid requests with 400 error
+
+    EXTRACT event FROM request_body
+
+    TRY:
+        // Prepare SQL INSERT query
+        SQL_QUERY = """
+            INSERT INTO traffic_events (
+                timestamp, location_id, vehicle_count,
+                avg_speed, min_speed, max_speed,
+                color_counts, inter_arrival_stats,
+                traffic_density_score, raw_features
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+        """
+
+        // Execute insertion
+        result = EXECUTE database_connection_pool.query(
+            SQL: SQL_QUERY,
+            PARAMS: [
+                event.timestamp,
+                event.location_id,
+                event.vehicle_count,
+                event.avg_speed OR null,
+                event.min_speed OR null,
+                event.max_speed OR null,
+                JSON_stringify(event.color_counts) OR null,
+                JSON_stringify(event.inter_arrival_stats) OR null,
+                event.traffic_density_score OR null,
+                JSON_stringify(event.raw_features) OR null
+            ]
+        )
+
+        // Success response
+        RETURN HTTP 201 (Created):
+            success: true
+            id: result.inserted_id
+
+    CATCH database_error:
+        LOG_ERROR database_error
+
+        RETURN HTTP 500 (Internal Server Error):
+            success: false
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// ENDPOINT: GET /metrics/traffic
+// High-level flow: Parse date filters → Query aggregations → Query timeseries → Return combined data
+// ═══════════════════════════════════════════════════════════════════
+
+ENDPOINT GET "/metrics/traffic":
+    """
+    Returns aggregated traffic metrics and timeseries data.
+    Used by dashboard for visualization and by analysis service for anomaly detection.
+
+    Query Parameters:
+        start (optional): Filter events after this datetime
+        end (optional): Filter events before this datetime
+
+    Called by: Dashboard frontend, Analysis service
+    Calls: PostgreSQL SELECT with aggregations and GROUP BY
+    """
+
+    EXTRACT start_time FROM query_parameters (optional)
+    EXTRACT end_time FROM query_parameters (optional)
+
+    TRY:
+        // Build WHERE clause dynamically based on provided filters
+        conditions = []
+        parameters = []
+
+        IF start_time IS provided:
+            ADD "timestamp >= $1" TO conditions
+            ADD start_time TO parameters
+
+        IF end_time IS provided:
+            ADD "timestamp <= $N" TO conditions  // N = next parameter number
+            ADD end_time TO parameters
+
+        where_clause = IF conditions THEN "WHERE " + JOIN(conditions, " AND ") ELSE ""
+
+        // ─────────────────────────────────────────────────────────────
+        // Query 1: Get summary statistics
+        // ─────────────────────────────────────────────────────────────
+        SUMMARY_QUERY = """
+            SELECT
+                COUNT(*) as event_count,               // Total number of events
+                SUM(vehicle_count) as total_vehicles,  // Total vehicles observed
+                AVG(avg_speed) as average_speed,       // Mean speed across all events
+                MIN(timestamp) as period_start,        // First event timestamp
+                MAX(timestamp) as period_end           // Last event timestamp
+            FROM traffic_events
+            """ + where_clause
+
+        summary_result = EXECUTE database_connection_pool.query(
+            SQL: SUMMARY_QUERY,
+            PARAMS: parameters
+        )
+
+        // ─────────────────────────────────────────────────────────────
+        // Query 2: Get hourly timeseries data
+        // ─────────────────────────────────────────────────────────────
+        TIMESERIES_QUERY = """
+            SELECT
+                DATE_TRUNC('hour', timestamp) as time_bucket,  // Group by hour
+                SUM(vehicle_count) as vehicle_count,           // Vehicles per hour
+                AVG(avg_speed) as avg_speed                    // Average speed per hour
+            FROM traffic_events
+            """ + where_clause + """
+            GROUP BY time_bucket
+            ORDER BY time_bucket
+        """
+
+        timeseries_result = EXECUTE database_connection_pool.query(
+            SQL: TIMESERIES_QUERY,
+            PARAMS: parameters
+        )
+
+        // Return combined results
+        RETURN HTTP 200 (OK):
+            summary: summary_result.first_row
+            timeseries: timeseries_result.all_rows
+
+    CATCH database_error:
+        LOG_ERROR database_error
+
+        RETURN HTTP 500 (Internal Server Error):
+            error: error_message
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT traffic_routes_module

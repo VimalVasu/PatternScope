@@ -1,0 +1,399 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * FILE: analysis/services/analysis.pseudo
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * RESPONSIBILITY:
+ *   Core anomaly detection engine using multiple statistical and ML algorithms.
+ *   Implements four different anomaly detection methods:
+ *   1. Z-Score (statistical outlier detection)
+ *   2. IQR - Interquartile Range (statistical outlier detection)
+ *   3. Isolation Forest (ensemble ML method)
+ *   4. LOF - Local Outlier Factor (density-based ML method)
+ *
+ * SYSTEM FIT:
+ *   - Central brain of the anomaly detection system
+ *   - Processes traffic events from database using pandas DataFrames
+ *   - Applies multiple algorithms for robust detection (ensemble approach)
+ *   - Deduplicates anomalies detected by multiple methods
+ *   - Stores results back in database for dashboard consumption
+ *
+ * KEY DEPENDENCIES:
+ *   → services/db.py - Database access for fetching traffic events
+ *   → scikit-learn - Machine learning algorithms (Isolation Forest, LOF)
+ *   → pandas/numpy - Data processing and numerical computations
+ *   → anomalies table - Stores detected anomalies
+ *
+ * CALLED BY:
+ *   - analysis/main.py POST /run-analysis endpoint
+ *
+ * CALLS:
+ *   - Database.fetch_traffic_events() to get data
+ *   - Database.insert_anomalies() to store results
+ *   - ML algorithms from scikit-learn
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+IMPORT pandas, numpy
+IMPORT IsolationForest FROM sklearn.ensemble
+IMPORT LocalOutlierFactor FROM sklearn.neighbors
+IMPORT Database FROM services/db.pseudo
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLASS: AnalysisService
+// ═══════════════════════════════════════════════════════════════════
+
+CLASS AnalysisService:
+    """
+    Orchestrates anomaly detection across multiple algorithms.
+    """
+
+    CONSTRUCTOR():
+        INITIALIZE self.database = new Database()
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MAIN ORCHESTRATION METHOD
+    // High-level flow: Fetch data → Run selected algorithms → Deduplicate → Store → Return
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD run_analysis(start, end, methods):
+        """
+        Executes anomaly detection using specified methods.
+
+        Arguments:
+            start: datetime - Start of analysis window (optional)
+            end: datetime - End of analysis window (optional)
+            methods: array - List of method names to run
+
+        Returns:
+            Dictionary with:
+                - success: boolean
+                - anomalies_detected: count
+                - anomaly_details: array of anomaly objects
+                - period: {start, end}
+                - methods_used: array of method names
+
+        Called by: main.py /run-analysis endpoint
+        Calls: Database fetch, detection methods, database insert
+        """
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 1: Fetch traffic events from database
+        // ─────────────────────────────────────────────────────────────
+        start_string = start.to_ISO8601() IF start ELSE null
+        end_string = end.to_ISO8601() IF end ELSE null
+
+        traffic_dataframe = self.database.fetch_traffic_events(
+            start: start_string,
+            end: end_string
+        )
+
+        // Check if we have data to analyze
+        IF traffic_dataframe IS empty:
+            RETURN:
+                success: true
+                anomalies_detected: 0
+                message: "No traffic events found in the specified period"
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 2: Run selected anomaly detection algorithms
+        // ─────────────────────────────────────────────────────────────
+        all_detected_anomalies = []
+
+        methods = methods OR ['zscore', 'iqr', 'isolation_forest']
+
+        IF 'zscore' IN methods:
+            zscore_anomalies = self._detect_zscore(traffic_dataframe)
+            APPEND zscore_anomalies TO all_detected_anomalies
+
+        IF 'iqr' IN methods:
+            iqr_anomalies = self._detect_iqr(traffic_dataframe)
+            APPEND iqr_anomalies TO all_detected_anomalies
+
+        IF 'isolation_forest' IN methods:
+            forest_anomalies = self._detect_isolation_forest(traffic_dataframe)
+            APPEND forest_anomalies TO all_detected_anomalies
+
+        IF 'lof' IN methods:
+            lof_anomalies = self._detect_lof(traffic_dataframe)
+            APPEND lof_anomalies TO all_detected_anomalies
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 3: Remove duplicates (same event flagged by multiple algorithms)
+        // Keep the detection with highest confidence score
+        // ─────────────────────────────────────────────────────────────
+        unique_anomalies = self._deduplicate_anomalies(all_detected_anomalies)
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 4: Store anomalies in database
+        // ─────────────────────────────────────────────────────────────
+        IF unique_anomalies IS NOT empty:
+            self.database.insert_anomalies(unique_anomalies)
+
+        // ─────────────────────────────────────────────────────────────
+        // Step 5: Return analysis summary
+        // ─────────────────────────────────────────────────────────────
+        RETURN:
+            success: true
+            anomalies_detected: LENGTH(unique_anomalies)
+            anomaly_details: unique_anomalies
+            period:
+                start: start_string
+                end: end_string
+            methods_used: methods
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DETECTION METHOD 1: Z-SCORE
+    // Statistical method: Flags values more than 3 standard deviations from mean
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _detect_zscore(dataframe, threshold=3.0):
+        """
+        Detects anomalies using Z-score (standard deviation) method.
+        Flags data points that are more than 'threshold' standard deviations
+        away from the mean.
+
+        Algorithm:
+            z_score = |value - mean| / standard_deviation
+            IF z_score > threshold THEN anomaly
+
+        Good for: Detecting extreme outliers in normally distributed data
+        """
+
+        anomalies = []
+
+        // Check each metric separately
+        FOR EACH metric IN ['vehicle_count', 'avg_speed', 'traffic_density_score']:
+            IF metric NOT in dataframe OR all values are null:
+                CONTINUE
+
+            // Calculate statistics
+            mean = CALCULATE_MEAN(dataframe[metric])
+            std_deviation = CALCULATE_STD(dataframe[metric])
+
+            IF std_deviation == 0:
+                CONTINUE  // No variation, skip this metric
+
+            // Calculate z-scores for all values
+            z_scores = |dataframe[metric] - mean| / std_deviation
+
+            // Find anomalies (z-score > threshold)
+            FOR EACH row WHERE z_scores[row] > threshold:
+                anomaly_confidence = MIN(z_scores[row] / threshold, 1.0)
+
+                ADD TO anomalies:
+                    traffic_event_id: row.id
+                    anomaly_type: "zscore"
+                    confidence_score: anomaly_confidence
+                    affected_metrics: [metric]
+                    description: "{{metric}} value {{value}} is {{z_score}} standard deviations from mean"
+
+        RETURN anomalies
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DETECTION METHOD 2: IQR (INTERQUARTILE RANGE)
+    // Statistical method: Flags values outside the "normal" range defined by quartiles
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _detect_iqr(dataframe):
+        """
+        Detects anomalies using Interquartile Range method.
+        Flags values that fall outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR].
+
+        Algorithm:
+            Q1 = 25th percentile
+            Q3 = 75th percentile
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            IF value < lower_bound OR value > upper_bound THEN anomaly
+
+        Good for: Robust outlier detection, less sensitive to extreme values than Z-score
+        """
+
+        anomalies = []
+
+        FOR EACH metric IN ['vehicle_count', 'avg_speed', 'traffic_density_score']:
+            IF metric NOT in dataframe OR all values are null:
+                CONTINUE
+
+            // Calculate quartiles
+            Q1 = PERCENTILE(dataframe[metric], 25)
+            Q3 = PERCENTILE(dataframe[metric], 75)
+            IQR = Q3 - Q1
+
+            // Define outlier boundaries
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+
+            // Find anomalies outside bounds
+            FOR EACH row WHERE value < lower_bound OR value > upper_bound:
+                distance_from_bound = MAX(
+                    ABS(value - lower_bound),
+                    ABS(value - upper_bound)
+                )
+
+                confidence = MIN(distance_from_bound / (IQR * 1.5), 1.0) IF IQR > 0 ELSE 0.5
+
+                ADD TO anomalies:
+                    traffic_event_id: row.id
+                    anomaly_type: "iqr"
+                    confidence_score: confidence
+                    affected_metrics: [metric]
+                    description: "{{metric}} value {{value}} is outside IQR bounds [{{lower}}, {{upper}}]"
+
+        RETURN anomalies
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DETECTION METHOD 3: ISOLATION FOREST
+    // ML method: Ensemble of decision trees that isolate anomalies
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _detect_isolation_forest(dataframe):
+        """
+        Detects anomalies using Isolation Forest algorithm.
+        Uses ensemble of decision trees to identify points that are easy to isolate
+        (i.e., anomalies require fewer splits to isolate than normal points).
+
+        Algorithm:
+            Build multiple random decision trees
+            Anomalies are isolated with fewer splits
+            Score based on average path length across trees
+
+        Good for: Multi-dimensional anomaly detection, handles complex patterns
+        """
+
+        anomalies = []
+
+        // Select numeric features for analysis
+        feature_columns = ['vehicle_count', 'avg_speed', 'traffic_density_score']
+        available_features = [col FOR col IN feature_columns IF col exists AND not all null]
+
+        IF available_features IS empty:
+            RETURN anomalies
+
+        // Prepare feature matrix
+        X = dataframe[available_features]
+        X = FILL_MISSING_VALUES(X, strategy: mean)
+
+        IF LENGTH(X) < 10:
+            RETURN anomalies  // Need minimum samples for ML
+
+        // Train Isolation Forest model
+        model = CREATE IsolationForest WITH:
+            contamination: 0.1           // Expect 10% of data to be anomalies
+            random_state: 42             // For reproducibility
+
+        predictions = model.fit_predict(X)       // -1 = anomaly, 1 = normal
+        anomaly_scores = model.score_samples(X)  // Lower score = more anomalous
+
+        // Extract detected anomalies
+        FOR EACH row WHERE predictions[row] == -1:
+            confidence = 1.0 - (anomaly_scores[row] + 0.5)  // Normalize score to [0, 1]
+
+            ADD TO anomalies:
+                traffic_event_id: row.id
+                anomaly_type: "isolation_forest"
+                confidence_score: confidence
+                affected_metrics: available_features
+                description: "Anomaly detected using Isolation Forest on features: {{features}}"
+
+        RETURN anomalies
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DETECTION METHOD 4: LOCAL OUTLIER FACTOR (LOF)
+    // ML method: Density-based algorithm that compares local density
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _detect_lof(dataframe):
+        """
+        Detects anomalies using Local Outlier Factor algorithm.
+        Identifies points that have significantly lower density than their neighbors.
+
+        Algorithm:
+            For each point:
+                Find k nearest neighbors
+                Compare local density to neighbors' density
+                Low relative density = anomaly
+
+        Good for: Detecting density-based anomalies, works well with clusters
+        """
+
+        anomalies = []
+
+        // Select features
+        feature_columns = ['vehicle_count', 'avg_speed', 'traffic_density_score']
+        available_features = [col FOR col IN feature_columns IF col exists AND not all null]
+
+        IF available_features IS empty:
+            RETURN anomalies
+
+        // Prepare data
+        X = dataframe[available_features]
+        X = FILL_MISSING_VALUES(X, strategy: mean)
+
+        IF LENGTH(X) < 10:
+            RETURN anomalies
+
+        // Train LOF model
+        model = CREATE LocalOutlierFactor WITH:
+            n_neighbors: 20              // Compare against 20 nearest neighbors
+            contamination: 0.1           // Expect 10% anomalies
+
+        predictions = model.fit_predict(X)              // -1 = anomaly, 1 = normal
+        outlier_scores = model.negative_outlier_factor_ // More negative = more anomalous
+
+        // Extract anomalies
+        FOR EACH row WHERE predictions[row] == -1:
+            confidence = MIN(ABS(outlier_scores[row]), 1.0)
+
+            ADD TO anomalies:
+                traffic_event_id: row.id
+                anomaly_type: "lof"
+                confidence_score: confidence
+                affected_metrics: available_features
+                description: "Local outlier detected on features: {{features}}"
+
+        RETURN anomalies
+
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: DEDUPLICATION
+    // Removes duplicate detections, keeping highest confidence score
+    // ═══════════════════════════════════════════════════════════════════
+
+    METHOD _deduplicate_anomalies(anomalies):
+        """
+        Removes duplicate anomalies for the same traffic event.
+        If multiple algorithms flag the same event, keeps the detection
+        with the highest confidence score.
+
+        Input: Array of all anomalies from all algorithms
+        Output: Array of unique anomalies (one per traffic_event_id)
+        """
+
+        seen_events = {}
+
+        FOR EACH anomaly IN anomalies:
+            event_id = anomaly.traffic_event_id
+
+            IF event_id NOT in seen_events:
+                seen_events[event_id] = anomaly
+            ELSE IF anomaly.confidence_score > seen_events[event_id].confidence_score:
+                // Replace with higher confidence detection
+                seen_events[event_id] = anomaly
+
+        RETURN VALUES(seen_events)
+
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+
+EXPORT AnalysisService
